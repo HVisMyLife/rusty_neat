@@ -2,9 +2,8 @@
 Simple lib for handling Neuroevolution of augmenting topologies.
 Documentation and program still in progress
 
-###Exaple usage:
+### Exaple usage:
 
-{
     fn init() {
 
     // init new network with amount of (input, output) nodes
@@ -23,4 +22,3 @@ Documentation and program still in progress
         println!("\nNodes: \n{:?}", net.nodes);
 
     }
-}
