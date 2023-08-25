@@ -1,6 +1,6 @@
 # rusty_neat
 Simple lib for handling Neuroevolution of augmenting topologies.
-It may not be exact implementation of that alghoritm, but it's simple, fast, and easy to use. Above that, it just works for my use cases, so that's that.
+It may not be exact implementation of that alghoritm, but it's simple, fast, and easy to use. Moreover, it just works for my use cases, so that's that.
 Documentation and lib still in progress
 
 ### What it does?
