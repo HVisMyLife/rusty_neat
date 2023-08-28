@@ -6,7 +6,7 @@ description = "Simple NEAT lib"
 readme = "README.md"
 homepage = "https://github.com/HVisMyLife/rusty_neat"
 repository = "https://github.com/HVisMyLife/rusty_neat"
-keywords = ["neat", "neural network", "ai"]
+keywords = ["neat", "neural_network", "ai"]
 categories = ["mathematics"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
