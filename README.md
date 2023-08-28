@@ -13,6 +13,8 @@ Alternativly, you can make agents spawn children after, for example, surviving a
 Next generation should be created by copying neural network of it's predecessor and mutating it.
 
 ### Exaple usage:
+    
+    use rusty_neat::NN;
 
     fn init() {
 
