@@ -19,6 +19,9 @@ Next generation should be created by copying neural network of it's predecessor 
     // init new network with amount of (input, output) nodes
         let mut net = NN::new(3, 2);
 
+    // set diffrent ( than default ) chances of mutations, sum (eg. 100%) doesn't matter
+        net.set_chances(&[20, 20, 20, 0, 0, 0, 0])
+
     // evolve network, mutations are chosen randomly,
     // in future there will be an interface for choosing types and chances
         for _ in 0..32 {
@@ -43,7 +46,8 @@ Next generation should be created by copying neural network of it's predecessor 
         net.load("path");
     }
 
-Possible mutations and it's hardcoded propabilities:
+Possible mutations it's order, and default chances:
+
     35% => modify one of connections weight,
     35% => modify one of nodes bias,
     10% => change one of nodes activation function,
@@ -51,6 +55,3 @@ Possible mutations and it's hardcoded propabilities:
     10% => add new random node,
     0% => connection_enable,
     0% => connection_disable,
-
-
-Soon I will add interface for modyfing those propabilities

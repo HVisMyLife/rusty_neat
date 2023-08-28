@@ -17,6 +17,8 @@ mod tests {
         for _ in 0..32 {
             net.mutate();
         }
+        let _ = net.get_chances();
+        net.set_chances(&[0,0,0]);
         net.forward(&[0.5, 0.2, 0.8]);
         println!("\nOrder: \n{:?}", net.layer_order);
         println!("\nConnections: \n{:?}", net.connections);
@@ -110,7 +112,7 @@ pub struct NN {
     pub generation: usize, // generation number, just out of curiosity
     pub size: (usize, usize),
 
-    pub chances: [usize; 7], // chances for mutations to happen, sum does NOT need to be equal 100
+    chances: [usize; 7], // chances for mutations to happen, sum does NOT need to be equal 100
 }
 
 impl NN {
@@ -130,6 +132,17 @@ impl NN {
         } 
     }
 
+    pub fn get_chances(&mut self) -> &[usize; 7] {
+        &self.chances
+    }
+
+    pub fn set_chances(&mut self, ch: &[usize]) {
+        let mut size = ch.len();
+        if size > 7 {size = 7;}
+        for i in 0..size {
+            self.chances[i] = ch[i];
+        }
+    }
 
     pub fn forward(&mut self, input: &[f64]) -> Vec<f64>{
         // read inputs
