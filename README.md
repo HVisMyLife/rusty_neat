@@ -1,6 +1,16 @@
 # rusty_neat
 Simple lib for handling Neuroevolution of augmenting topologies.
-Documentation and program still in progress
+It may not be exact implementation of that alghoritm, but it's simple, fast, and easy to use. Moreover, it just works for my use cases, so that's that.
+Documentation and lib still in progress
+
+### What it does?
+In short, you start by creating input and output nodes, without any connections, etc.
+Then, through randomly evolving, there are added intermediate nodes and connections, which characteristics are randomly changed.
+
+### How to use it?
+Create large amount of agents, each with each own neural networks. Let simulation run ( or whatever you are using it for ) and after set amount of time choose best of them to be parents of next generation.
+Alternativly, you can make agents spawn children after, for example, surviving and getting set amount of points ( what are they depends on use case ).
+Next generation should be created by copying neural network of it's predecessor and mutating it.
 
 ### Exaple usage:
 
@@ -41,5 +51,6 @@ Possible mutations and it's hardcoded propabilities:
     10% => add new random node,
     0% => connection_enable,
     0% => connection_disable,
+
 
 Soon I will add interface for modyfing those propabilities
