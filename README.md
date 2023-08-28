@@ -55,3 +55,5 @@ Possible mutations it's order, and default chances:
     10% => add new random node,
     0% => connection_enable,
     0% => connection_disable,
+
+Struct NN supports serialization and deserialization through serde.
