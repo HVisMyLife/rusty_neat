@@ -109,6 +109,8 @@ pub struct NN {
                                         // which node calculate first
     pub generation: usize, // generation number, just out of curiosity
     pub size: (usize, usize),
+
+    pub chances: [usize; 7], // chances for mutations to happen, sum does NOT need to be equal 100
 }
 
 impl NN {
@@ -124,6 +126,7 @@ impl NN {
             layer_order: vec![], 
             generation: 0,
             size: (input_count, output_count),
+            chances: [35, 35, 10, 10, 10, 0, 0],
         } 
     }
 
@@ -172,16 +175,27 @@ impl NN {
         }
         self.generation += 1; // increment generation
 
-///////////////////////////////////////////////////////////////
-        //modify these values for diffrent mutation chances
-        match fastrand::usize(0..100) {
-            0..=34 => self.m_weight_mangle(),
-            35..=69 => self.m_bias_mangle(),
-            70..=79 => self.m_act_mangle(),
-            80..=89 => self.m_connection_add(),
-            90..=99 => self.m_node_add(),
-            200..=201 => self.m_connection_enable(),
-            300..=301 => self.m_connection_disable(),
+        // choose mutation based on chances
+        let random_num = fastrand::usize(0..self.chances.iter().sum());
+        let mut cumulative_prob = 0;
+        let mut func_num = 99;
+        for (i, prob) in self.chances.iter().enumerate() {
+            cumulative_prob += prob;
+            if random_num <= cumulative_prob {
+                func_num = i;
+                break;
+            }
+        }
+
+        match func_num {
+            0 => self.m_weight_mangle(),
+            1 => self.m_bias_mangle(),
+            2 => self.m_act_mangle(),
+            3 => self.m_connection_add(),
+            4 => self.m_node_add(),
+            5 => self.m_connection_enable(),
+            6 => self.m_connection_disable(),
+            99 => {},
             _ => unreachable!(),
         }
 
