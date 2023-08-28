@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Simple NEAT lib"
 readme = "README.md"
+license-file = "LICENSE.md"
 homepage = "https://github.com/HVisMyLife/rusty_neat"
 repository = "https://github.com/HVisMyLife/rusty_neat"
 keywords = ["neat", "neural_network", "ai"]
