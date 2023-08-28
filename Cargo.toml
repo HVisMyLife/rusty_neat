@@ -2,7 +2,10 @@
 name = "rusty_neat"
 version = "0.1.0"
 edition = "2021"
-
+description = "Simple NEAT lib"
+readme = "README.md"
+homepage = "https://github.com/HVisMyLife/rusty_neat"
+repository = "https://github.com/HVisMyLife/rusty_neat"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
