@@ -9,11 +9,12 @@ Then, through randomly evolving, there are added intermediate nodes and connecti
 
 ### How to use it?
 Create large amount of agents, each with each own neural networks. Let simulation run ( or whatever you are using it for ) and after set amount of time choose best of them to be parents of next generation.
-Alternativly, you can make agents spawn children after, for example, surviving and getting set amount of points ( what are they depends on use case ).
+Alternatively, you can make agents spawn children after, for example, surviving and getting set amount of points ( what are they depends on use case ).
 Next generation should be created by copying neural network of it's predecessor and mutating it.
 
 ### Exaple usage:
-    
+
+```rust
     use rusty_neat::NN;
 
     fn init() {
@@ -24,8 +25,7 @@ Next generation should be created by copying neural network of it's predecessor 
     // set diffrent ( than default ) chances of mutations, sum (eg. 100%) doesn't matter
         net.set_chances(&[20, 20, 20, 0, 0, 0, 0])
 
-    // evolve network, mutations are chosen randomly,
-    // in future there will be an interface for choosing types and chances
+    // evolve network, mutations are chosen randomly, according to above settings,
         for _ in 0..32 {
             net.mutate();
         }
@@ -47,9 +47,11 @@ Next generation should be created by copying neural network of it's predecessor 
     // load network from file
         net.load("path");
     }
+```
 
 Possible mutations it's order, and default chances:
 
+```rust
     35% => modify one of connections weight,
     35% => modify one of nodes bias,
     10% => change one of nodes activation function,
@@ -57,5 +59,6 @@ Possible mutations it's order, and default chances:
     10% => add new random node,
     0% => connection_enable,
     0% => connection_disable,
+```
 
 Struct NN supports serialization and deserialization through serde.
