@@ -11,6 +11,7 @@ Then, through randomly evolving, there are added intermediate nodes and connecti
 Create large amount of agents, each with each own neural networks. Let simulation run ( or whatever you are using it for ) and after set amount of time choose best of them to be parents of next generation.
 Alternatively, you can make agents spawn children after, for example, surviving and getting set amount of points ( what are they depends on use case ).
 Next generation should be created by copying neural network of it's predecessor and mutating it.
+Here you have example project that uses it to train "cars" ride along random track: https://github.com/HVisMyLife/neat_race
 
 ### Exaple usage:
 
