@@ -3,6 +3,10 @@ Simple lib for handling Neuroevolution of augmenting topologies.
 It may not be exact implementation of that alghoritm, but it's simple, fast, and easy to use. Moreover, it just works for my use cases, so that's that.
 Documentation and lib still in progress
 
+### NN visual representation 
+Network can be saved as .svg: blue connections are recurrent, thickness represents weight, and node 0 is a bias.
+![example](https://github.com/HVisMyLife/rusty_neat/blob/master/data/nn.png)
+
 ### What it does?
 In short, you start by creating input and output nodes, without any connections, etc.
 Then, through randomly evolving, there are added intermediate nodes and connections, which characteristics are randomly changed.
