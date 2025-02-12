@@ -20,5 +20,8 @@ rand_distr = "^0.5"
 
 simplesvg = "^0.4"
 
-#ndarray = { version = "^0.15.6", features = ["rayon", "serde", "matrixmultiply-threading"]}
+rayon = "^1.10"
+itertools = "^0.14"
+
+# ndarray = { version = "^0.16", features = ["rayon", "serde"]}
 #ndarray-rand = "^0.14.0"

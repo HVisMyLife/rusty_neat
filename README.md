@@ -10,7 +10,8 @@ Network can be saved as .svg: blue connections are recurrent, thickness represen
 ### What it does?
 In short, you start by creating input and output nodes, without any connections, etc.
 Then, through randomly evolving, there are added intermediate nodes and connections, which characteristics are randomly changed.
-Speciation and crossovers should be in next release
+NEW: each connection has an optional gating node.
+ALMOST DONE: Speciation and crossovers
 
 ### How to use it?
 Create large amount of agents, each with each own neural networks. Let simulation run ( or whatever you are using it for ) and after set amount of time choose best of them to be parents of next generation.
@@ -61,11 +62,13 @@ Possible mutations it's order, and default chances:
 
 ```rust
     200 => modify one of connections weight,
-    40 => add new random connection,
-    14 => add new random node,
-    2% => connection_enable,
-    0% => connection_disable,
-    10% => change one of nodes activation function,
+    20 => add new random connection,
+    5 => add new random node,
+    10 => add gating node to connection,
+    3 => romove gating node from connection,
+    0 => connection_enable,
+    0 => connection_disable,
+    0 => change one of nodes activation function,
 ```
 
 Struct NN supports serialization and deserialization through serde.
