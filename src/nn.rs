@@ -12,9 +12,8 @@ use crate::{connection::Connection, node::{ActFunc, Genre, Node, NodeKey}};
 pub struct NN {    
     pub nodes: HashMap<NodeKey, Node>, // key is a splited connection key + doubles protection
     pub connections: HashMap<usize, Connection>, // key is an innovation number
-    pub layer_order: Vec<HashSet<NodeKey>>, // layers for calculating values (without input nodes), eg
-                                        // which node calculate first
-    pub sccs: Vec<Vec<NodeKey>>, // for loops inside network
+    pub layer_order: Vec<HashSet<NodeKey>>, // layers for calculating values
+    pub idle: HashSet<NodeKey>, // nodes without input connections 
     pub generation: usize, // generation number, just out of curiosity
     pub size: (usize, usize), // information
 
@@ -24,7 +23,8 @@ pub struct NN {
     recurrence: bool,
     pub nodes_function: ActFunc,
     pub fitness: f32,
-    pub species: usize
+    pub species: usize,
+    pub active: bool,
 }
 
 impl NN {
@@ -33,11 +33,11 @@ impl NN {
         let mut n = HashMap::new();
         n.insert(
             NodeKey::new(0, 0), 
-            Node::new(Genre::Input, &ActFunc::None)); // bias node 
+            Node::new(Genre::Input, &ActFunc::Input)); // bias node 
         for i in 1..input_count+1 { 
             n.insert(
                 NodeKey::new(i, 0), 
-                Node::new(Genre::Input, &ActFunc::None)); 
+                Node::new(Genre::Input, &ActFunc::Input)); 
         }
         for i in input_count+1..input_count+output_count+1 { 
             n.insert(
@@ -49,15 +49,17 @@ impl NN {
             nodes: n, 
             connections: HashMap::new(),
             layer_order: vec![], 
-            sccs: vec![],
+            idle: HashSet::new(),
             generation: 0,
             size: (input_count+1, output_count),
             outputs: vec![0.; output_count],
             chances: [200, 20, 5, 10, 3, 0, 0, 0], // weight, ca, na, ga, gr, cn, cf, am
+            //chances: [200, 20, 5, 0, 0, 0, 0, 0], // weight, ca, na, ga, gr, cn, cf, am
             recurrence,
             nodes_function: af, 
             fitness: 0.,
-            species
+            species,
+            active: true,
         };
         s.sort_layers();
         s.free_nodes_calc();
@@ -86,7 +88,7 @@ impl NN {
         // TODO removing dead-ends
     }
 
-    pub fn compare(&mut self, nn: &NN, c1: f32, c2: f32, c3: f32) -> f32 {
+    pub fn compare(&self, nn: &NN, c1: f32, c2: f32, c3: f32) -> f32 {
         let mut g_e = 0;    // excess
         let mut g_d = 0;    // disjoint 
         let mut g_wd = 0.;  // sum of weight differences 
@@ -97,17 +99,22 @@ impl NN {
         for i in 0 ..= *max {
             let a = match self.connections.get(&i)  { Some(c) => c.weight, None => f32::MAX };
             let b = match nn.connections.get(&i)    { Some(c) => c.weight, None => f32::MAX };
-
-            if a != f32::MAX && b != f32::MAX { g_m += 1; g_wd += (a - b).abs() }
-            else if *max_a.min(max_b) < i && (a != f32::MAX || b != f32::MAX) { g_e += 1; }
+            
+            if a != f32::MAX && b != f32::MAX { g_m += 1; g_wd += (a - b).abs(); }
+            else if *max_a.min(max_b) < i && (a != f32::MAX || b != f32::MAX) { g_e += 1;}
             else if a != f32::MAX || b != f32::MAX { g_d += 1; }
         }
-        (c1 * g_e as f32)/(*max as f32) + (c2 * g_d as f32)/(*max as f32) + c3 * (g_wd / g_m as f32)
+        let amount = self.connections.len().max(nn.connections.len());
+        let excess =    ( c1 * (g_e as f32) ) / ( amount as f32 );
+        let disjoint =  ( c2 * (g_d as f32) ) / ( amount as f32 );
+        let weight = if g_m != 0  {c3 * ((g_wd as f32) / (g_m as f32) )} else {0.};
+        //println!("e:{} , d:{} , w:{}", excess, disjoint, weight);
+        excess + disjoint + weight
     }
 
     // fitness average / species size 
     // fitness adjusted / global fitness adjusted * N
-    pub fn crossover(&mut self, nn: &NN) -> NN {
+    pub fn crossover(&self, nn: &NN) -> NN {
         let mut child = match self.fitness > nn.fitness {
             true => self.clone(),
             false => nn.clone()
@@ -120,7 +127,9 @@ impl NN {
 
             if a != None && b != None {
                 child.connections.get_mut(&i).unwrap().weight = 
-                    (a.unwrap().weight + b.unwrap().weight) / 2.;
+                    (a.unwrap().weight + b.unwrap().weight) / 2.; 
+                // gates have to be the same as
+                // in node's source, so from fittest parent
             }
         }
         child
@@ -180,6 +189,7 @@ impl NN {
             ActFunc::SigmoidBipolar => (2.0 / (1.0 + (-sum).exp()) ) - 1., // offset
             ActFunc::Tanh => sum.tanh(),
             ActFunc::ReLU => sum.max(0.0),
+            ActFunc::Input => node.value + sum,
             ActFunc::None => sum,
         };
         //node.value_gate = 1.0 / (1.0 + (-sum).exp());
@@ -190,7 +200,7 @@ impl NN {
     // Returns option1 if made a new connection (from node, to node)
     // Returns option2 if made a new node (innovation number of splited connection)
     // handler needs to assign innov_id's after analyzing whole generation
-    pub fn mutate(&mut self) -> (Option<(NodeKey, NodeKey)>, Option<( (NodeKey,NodeKey), (NodeKey, NodeKey) )>) {
+    pub fn mutate(&mut self) -> (Option<Connection>, Option<( Connection, Connection )>) {
         self.generation += 1; // increment generation
 
         // choose mutation based on chances
@@ -219,7 +229,7 @@ impl NN {
 
 // #########################################################################################################################################
     // returns splitted connection innovation number, if Some() global is incremented by 2 
-    fn m_node_add(&mut self) -> Option<( (NodeKey,NodeKey), (NodeKey, NodeKey) )> {
+    fn m_node_add(&mut self) -> Option<( Connection, Connection )> {
         // inserting nodes into recurrent connections, 
         // at the moment both are recurrent
         //
@@ -228,7 +238,7 @@ impl NN {
 
         let mut rng = rand::rng();
         // get connection to be replaced
-        let c_key = match self.connections.iter_mut().filter(|(_,c)| c.active).choose(&mut rng) { // f recurrent
+        let c_key = match self.connections.iter_mut().filter(|(_,c)| c.active).choose_stable(&mut rng) { // f recurrent
             Some(c) => c.0.clone(),
             None => return None,
         };
@@ -251,16 +261,16 @@ impl NN {
             usize::MAX-1,
             Connection::new(key.clone(), c.to.clone(), c.recurrent)); // ID
         self.connections.get_mut(&(usize::MAX-1)).unwrap().assign_weight(c.weight);
-        Some(( (c.from, key.clone()), (key.clone(), c.to) ))
+        Some(( self.connections.get(&usize::MAX).unwrap().clone(), self.connections.get(&(usize::MAX-1)).unwrap().clone() ))
     }
 
     // returns from and to node's innovation id's
-    fn m_connection_add(&mut self) -> Option<(NodeKey, NodeKey)> {
+    fn m_connection_add(&mut self) -> Option<Connection> {
         let mut rng = rand::rng();
         // randomly select node index, that have free paths and isn't output, if none return (full)
-        match rng.random_ratio(3, 4) {
+        match !(rng.random_ratio(1, 4) && self.recurrence) {
             true => { // feedforward
-                let node_from = match self.nodes.iter().filter(|(_,n)| !n.free_nodes_f.is_empty() ).choose(&mut rng){
+                let node_from = match self.nodes.iter().filter(|(_,n)| !n.free_nodes_f.is_empty() ).choose_stable(&mut rng){
                     Some(n) => n,
                     None => return None,
                 };
@@ -270,10 +280,10 @@ impl NN {
                     usize::MAX,
                     Connection::new(node_from.0.clone(), key_to.clone(), false)
                 );
-                Some((node_from.0.clone(), key_to.clone()))
+                Some(self.connections.get(&usize::MAX).unwrap().clone())
             },
             false => { // recurrent
-                let node_from = match self.nodes.iter().filter(|(_,n)| !n.free_nodes_r.is_empty() ).choose(&mut rng){
+                let node_from = match self.nodes.iter().filter(|(_,n)| !n.free_nodes_r.is_empty() ).choose_stable(&mut rng){
                     Some(n) => n,
                     None => return None,
                 };
@@ -283,7 +293,7 @@ impl NN {
                     usize::MAX,
                     Connection::new(node_from.0.clone(), key_to.clone(), true)
                 );
-                Some((node_from.0.clone(), key_to.clone()))
+                Some(self.connections.get(&usize::MAX).unwrap().clone())
             }
         }
     }
@@ -441,7 +451,7 @@ impl NN {
         let layer_0: HashSet<NodeKey> = self.nodes.iter().filter(|(_,n)| n.genre == Genre::Input ).map(|(k,_)|k.clone()).collect();
         self.layer_order.push(layer_0.clone());
         let layer_o: HashSet<NodeKey> = self.nodes.iter().filter(|(_,n)| n.genre == Genre::Output ).map(|(k,_)|k.clone()).collect();
-        self.layer_order.push(layer_o);
+        self.layer_order.push(layer_o.clone());
 
         // Build adjacency lists for feedforward and recurrent connections.
         let mut feedforward_adj: HashMap<&NodeKey, Vec<&NodeKey>> = HashMap::new();
@@ -508,114 +518,19 @@ impl NN {
                 self.layer_order.get_mut(*i).unwrap().insert(k.clone());
             } );
         }
+        self.idle.clear();
+        leftover_nodes.iter().for_each(|k| {self.idle.insert(k.clone());} );
 
         // correct first and last
         if self.layer_order[0].len() > self.size.0 {
             self.layer_order[0].retain(|k| self.nodes.get(k).unwrap().genre != Genre::Input );
             self.layer_order.insert(0, layer_0);
         }
-        //let l = self.layer_order.len() -1;
-        //if self.layer_order[l].len() > self.size.1 {
-        //    self.layer_order[l].retain(|k| self.nodes.get(k).unwrap().genre != Genre::Output );
-        //    self.layer_order.push(layer_o);
-        //}
-
-        //
-        self.find_sccs();
-    }
-
-// #########################################################################################################################################
-    // --- find_sccs (Tarjan's Algorithm Implementation) ---
-    // for now - curiosity
-    fn find_sccs(&mut self) {
-        // 1. Filter out non-recurrent connections
-        let recurrent_connections: Vec<&Connection> = self.connections
-            .values()
-            //.filter(|conn| conn.recurrent)
-            .collect();
-
-        // 2. Build the adjacency list for Tarjan's algorithm
-        let mut adj_list: HashMap<NodeKey, Vec<NodeKey>> = HashMap::new();
-        for node_key in self.nodes.keys() {
-            adj_list.insert(node_key.clone(), Vec::new());
+        let l = self.layer_order.len() -1;
+        if self.layer_order[l].len() > self.size.1 {
+            self.layer_order[l].retain(|k| self.nodes.get(k).unwrap().genre != Genre::Output );
+            self.layer_order.push(layer_o);
         }
-        for conn in recurrent_connections {
-            adj_list.get_mut(&conn.from).unwrap().push(conn.to.clone());
-        }
-
-        // 3. Tarjan's Algorithm Implementation
-        #[derive(Clone, Copy, Debug)]
-        struct TarjanNodeData {
-            index: Option<usize>,
-            lowlink: usize,
-            on_stack: bool,
-        }
-
-        let mut tarjan_data: HashMap<NodeKey, TarjanNodeData> = self.nodes
-            .keys().map(|k| {
-                (
-                    k.clone(),
-                    TarjanNodeData {index: None, lowlink: 0, on_stack: false},
-                )
-            })
-            .collect();
-        let mut stack: Vec<NodeKey> = Vec::new();
-        let mut index = 0;
-        let mut sccs: Vec<Vec<NodeKey>> = Vec::new();
-
-        fn strong_connect(
-            v: &NodeKey,
-            adj_list: &HashMap<NodeKey, Vec<NodeKey>>,
-            tarjan_data: &mut HashMap<NodeKey, TarjanNodeData>,
-            stack: &mut Vec<NodeKey>,
-            index: &mut usize,
-            sccs: &mut Vec<Vec<NodeKey>>,
-        ) {
-            tarjan_data.get_mut(v).unwrap().index = Some(*index);
-            tarjan_data.get_mut(v).unwrap().lowlink = *index;
-            *index += 1;
-            stack.push(v.clone());
-            tarjan_data.get_mut(v).unwrap().on_stack = true;
-
-            if let Some(neighbors) = adj_list.get(v) {
-                for w in neighbors {
-                    let mut v_data = *tarjan_data.get(v).unwrap();
-                    let mut w_data = *tarjan_data.get(w).unwrap(); // Dereference for easier access
-
-                    if w_data.index.is_none() {
-                        // Successor w has not yet been visited; recurse on it
-                        strong_connect(w, adj_list, tarjan_data, stack, index, sccs);
-                        // Use the updated w_data after the recursive call
-                        w_data = *tarjan_data.get(w).unwrap();
-                        v_data.lowlink = std::cmp::min(v_data.lowlink, w_data.lowlink);
-                    } else if w_data.on_stack {
-                        // Successor w is in stack S and hence in the current SCC
-                        v_data.lowlink = std::cmp::min(v_data.lowlink, w_data.index.unwrap());
-                    }
-                    // Update tarjan_data for v after processing neighbors
-                    tarjan_data.insert(v.clone(), v_data);
-                }
-            }
-
-            // If v is a root node, pop the stack and generate an SCC
-            if tarjan_data.get(v).unwrap().lowlink == tarjan_data.get(v).unwrap().index.unwrap() {
-                let mut scc: Vec<NodeKey> = Vec::new();
-                loop {
-                    let w = stack.pop().unwrap();
-                    tarjan_data.get_mut(&w).unwrap().on_stack = false;
-                    scc.push(w.clone());
-                    if &w == v { break; }
-                }
-                sccs.push(scc);
-            }
-        }
-
-        for node_key in self.nodes.keys() { // Iterate through all nodes
-            if tarjan_data.get(node_key).unwrap().index.is_none() {
-                strong_connect(node_key, &adj_list, &mut tarjan_data, &mut stack, &mut index, &mut sccs,);
-            }
-        }
-        self.sccs = sccs;
     }
 
 // #########################################################################################################################################
@@ -669,30 +584,27 @@ impl fmt::Debug for NN {
         let mut l = "---NN--- \n".to_string();
         l += "Nodes: \n";
         self.nodes.iter().sorted_by_key(|(k,_)| k.sconn ).for_each(|(i,n)|{
-            l += &(format!("{} {:?}", i, n) + "\n");
+            l += &(format!("{:?} {:?}", i, n) + "\n");
         });
         l += "Connections: \n";
         self.connections.iter().sorted_by_key(|(k,_)| **k ).for_each(|c|{
-            l += &(format!("{:>3} {:?}", c.0, c.1) + "\n");
+            l += &(format!("{:>4} {:?}", c.0, c.1) + "\n");
         });
         l += "Order: ";
         self.layer_order.iter().for_each(|layer| {
             l += "[ ";
             layer.iter().for_each(|k| {
-                l += &(format!("{}:{}, ", k.sconn, k.dup));
+                l += &k.to_string();
             } );
             l += "]";
         } );
         l += "\n";
-        l += "Sccs: ";
-        self.sccs.iter().for_each(|layer| {
-            l += "[ ";
-            layer.iter().for_each(|k| {
-                l += &(format!("{}:{}, ", k.sconn, k.dup));
-            } );
-            l += "]";
+        l += "Idle: [ ";
+        self.idle.iter().for_each(|k| {
+            l += &k.to_string();
         } );
-        l += "\n";
+        l += "]\n";
+
         l += &format!("Outputs: [ ");
         self.outputs.iter().for_each(|o| {
             l += &format!("{:>+.3}, ", o);
@@ -701,7 +613,8 @@ impl fmt::Debug for NN {
         l += &("Gen: ".to_string() + &self.generation.to_string() + "\n");
         l += &(format!("Chances: {:?}", self.chances) + "\n");
         l += &("Recurrence: ".to_string() + &self.recurrence.to_string() + "\n");
-        l += &( "Fitness: ".to_string() + &format!("{:.3}", self.fitness) + "\n" );
+        l += &("Species: ".to_string() + &format!("{}", self.species) + "\n" );
+        l += &("Fitness: ".to_string() + &format!("{:.3}", self.fitness) + "\n" );
         write!(fmt, "{}", l)
     }
 }

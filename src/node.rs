@@ -8,6 +8,7 @@ pub enum ActFunc {
     SigmoidBipolar,
     Tanh,
     ReLU,
+    Input,
     None
 }
 #[derive(Eq, PartialOrd, Ord, Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -24,12 +25,12 @@ pub struct NodeKey {
 }
 impl fmt::Debug for NodeKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:>3}:{}", self.sconn, self.dup)
+        write!(f, "{:>4}:{}", self.sconn, self.dup)
     }
 }
 impl fmt::Display for NodeKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:>3}:{}", self.sconn, self.dup)
+        write!(f, "{}:{} ", self.sconn, self.dup)
     }
 }
 impl NodeKey {
@@ -53,7 +54,7 @@ impl Node {
     // initializing to random values 
     pub fn new(genre: Genre, af: &ActFunc) -> Self { 
         // input nodes don't have activation functions
-        let af_c = if genre == Genre::Input {ActFunc::None}
+        let af_c = if genre == Genre::Input {ActFunc::Input}
         else {af.clone()};
 
         Self { 
@@ -85,6 +86,7 @@ impl fmt::Debug for Node {
             ActFunc::SigmoidBipolar => "*Sb",
             ActFunc::Tanh => "*T_",
             ActFunc::ReLU => "*R_",
+            ActFunc::Input => "xI_",
             ActFunc::None => "*1_",
         };
         l += &(" | G( ".to_string() + &format!("{:>+.3}", self.value_gate) + " )" );

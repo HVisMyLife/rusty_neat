@@ -35,11 +35,11 @@ impl Connection {
 impl fmt::Debug for Connection {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut l = "".to_string();
-        l += &( "( ".to_string() + &self.from.to_string() + " - " + &self.to.to_string() + " )");
+        l += &( "( ".to_string() + &format!("{:?}", self.from) + " - " + &format!("{:?}", self.to) + " )");
         l += &( "*".to_string() + &format!("{:>+7.3}", self.weight) );
         l += &( "\t :".to_string() + &self.active.to_string() );
         match &self.gater {
-            Some(g) => l += &( "\t|".to_string() + &g.to_string() ),
+            Some(g) => l += &( "\t|".to_string() + &format!("{:?}", g) ),
             None => l += "\t|------",
         }
         if self.recurrent {l += " R"}
