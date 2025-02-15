@@ -11,7 +11,7 @@ Network can be saved as .svg: blue connections are recurrent, thickness represen
 In short, you start by creating input and output nodes, without any connections, etc.
 Then, through randomly evolving, there are added intermediate nodes and connections, which characteristics are randomly changed.
 NEW: each connection has an optional gating node.
-ALMOST DONE: Speciation and crossovers
+NEW: Speciation and crossovers
 
 ### How to use it?
 Create large amount of agents, each with each own neural networks. Let simulation run ( or whatever you are using it for ) and after set amount of time choose best of them to be parents of next generation.
@@ -26,35 +26,22 @@ Here you have example project that uses it to train "cars" ride along random tra
 
     fn init() {
 
-    // init new network with amount of (input, output) nodes, recurrent connections, default activation function
-        let mut net = NN::new(3, 2, true, ActFunc::Tanh);
+        let gens = 10;
+        let size = 50;
+        let nn = NN::new(2, 2, true, ActFunc::SigmoidBipolar, 0);
+        let mut handler = NeatHandler::new(&nn, size);
 
-    // set diffrent ( than default ) chances of mutations, sum (eg. 100%) doesn't matter
-        net.set_chances(&[20, 20, 20, 0, 0, 0])
-
-    // evolve network, mutations are chosen randomly, according to above settings,
-        for _ in 0..32 {
-            net.mutate();
+        handler.forward(vec![vec![1.;2]; size]);
+        for _ in 0..5 {
+            handler.forward(vec![vec![1.;2]; size]);
         }
-    
-    // forward inputs through net and return outputs
-        let outputs = net.forward(&[0.5, 0.2, 0.8]);
-
-    // access internal structure
-        // calculation order, may be used for creating graph
-        println!("\nOrder: \n{:?}", net.layer_order);
-        // list of connections
-        println!("\nConnections: \n{:?}", net.connections);
-        // list of nodes
-        println!("\nNodes: \n{:?}", net.nodes);
-        // pretty debug
-        println!("\n{:?}", net);
-
-    // save network to file
-        net.save("path");
-
-    // load network from file
-        net.load("path");
+        handler.agents.iter_mut().enumerate().for_each(|(_,a)| a.fitness = 100. );
+        for _ in 0..5 {
+            //while handler.species_table.len().abs_diff(handler.species_amount) < 1 {handler.speciate();}
+            handler.speciate();
+            handler.next_gen();
+            handler.mutate();
+        }
     }
 ```
 
