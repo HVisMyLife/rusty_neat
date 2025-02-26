@@ -21,28 +21,29 @@ pub struct NN {
 
     chances: [usize; 8], // chances for mutations to happen, sum does NOT need to be equal 100
     recurrence: bool,
-    pub nodes_function: ActFunc,
+    pub function_io: ActFunc,
+    pub functions_allowed: Vec<ActFunc>,
     pub fitness: f32,
     pub species: usize,
     pub active: bool,
 }
 
 impl NN {
-    pub fn new(input_count: usize, output_count: usize, recurrence: bool, af: ActFunc, species: usize) -> Self { 
+    pub fn new(input_count: usize, output_count: usize, recurrence: bool, function_io: ActFunc, functions_allowed: &[ActFunc]) -> Self { 
         // create input and output nodes
         let mut n = HashMap::new();
         n.insert(
             NodeKey::new(0, 0), 
-            Node::new(Genre::Input, &ActFunc::Input)); // bias node 
+            Node::new(Genre::Input, &ActFunc::None)); // bias node 
         for i in 1..input_count+1 { 
             n.insert(
                 NodeKey::new(i, 0), 
-                Node::new(Genre::Input, &ActFunc::Input)); 
+                Node::new(Genre::Input, &ActFunc::None)); 
         }
         for i in input_count+1..input_count+output_count+1 { 
             n.insert(
                 NodeKey::new(i, 0), 
-                Node::new(Genre::Output, &af)); 
+                Node::new(Genre::Output, &function_io)); 
         }
 
         let mut s = Self { 
@@ -54,11 +55,11 @@ impl NN {
             size: (input_count+1, output_count),
             outputs: vec![0.; output_count],
             chances: [200, 20, 5, 10, 3, 0, 0, 0], // weight, ca, na, ga, gr, cn, cf, am
-            //chances: [200, 20, 5, 0, 0, 0, 0, 0], // weight, ca, na, ga, gr, cn, cf, am
             recurrence,
-            nodes_function: af, 
+            function_io,
+            functions_allowed: functions_allowed.to_vec(),
             fitness: 0.,
-            species,
+            species: 0,
             active: true,
         };
         s.sort_layers();
@@ -139,7 +140,7 @@ impl NN {
     
     pub fn process_network(&mut self, inputs: &[f32]) -> &Vec<f32> {
         let mut key = NodeKey::new(0, 0);
-        self.nodes.get_mut(&key).unwrap().value = 0.;
+        self.nodes.get_mut(&key).unwrap().value = 1.;
         for i in 0..inputs.len() {
             key.sconn = i + 1;
             self.nodes.get_mut(&key).unwrap().value = inputs[i];
@@ -183,15 +184,9 @@ impl NN {
         }
 
         let node = self.nodes.get_mut(node_key).unwrap();
+
         // Apply activation function (e.g., sigmoid, tanh, ReLU)
-        node.value = match node.act_func {
-            ActFunc::Sigmoid => 1.0 / (1.0 + (-sum).exp()),
-            ActFunc::SigmoidBipolar => (2.0 / (1.0 + (-sum).exp()) ) - 1., // offset
-            ActFunc::Tanh => sum.tanh(),
-            ActFunc::ReLU => sum.max(0.0),
-            ActFunc::Input => node.value + sum,
-            ActFunc::None => sum,
-        };
+        node.value = node.act_func.run(sum, node.value);
         //node.value_gate = 1.0 / (1.0 + (-sum).exp());
         node.value_gate = (0.2 * sum + 0.5).clamp(0., 1.); // faster than sigmoid 
     }
@@ -246,7 +241,7 @@ impl NN {
         let key = NodeKey::new(c_key, dup);
         self.nodes.insert(
             key.clone(),
-            Node::new(Genre::Hidden, &self.nodes_function));
+            Node::new(Genre::Hidden, &self.function_io));
         let c = self.connections.get_mut(&c_key).unwrap();
         c.active = false;
         let c = c.clone();
@@ -270,7 +265,7 @@ impl NN {
         // randomly select node index, that have free paths and isn't output, if none return (full)
         match !(rng.random_ratio(1, 4) && self.recurrence) {
             true => { // feedforward
-                let node_from = match self.nodes.iter().filter(|(_,n)| !n.free_nodes_f.is_empty() ).choose_stable(&mut rng){
+                let node_from = match self.nodes.iter().filter(|(_,n)| !n.free_nodes_f.is_empty() ).choose(&mut rng){
                     Some(n) => n,
                     None => return None,
                 };
@@ -283,7 +278,7 @@ impl NN {
                 Some(self.connections.get(&usize::MAX).unwrap().clone())
             },
             false => { // recurrent
-                let node_from = match self.nodes.iter().filter(|(_,n)| !n.free_nodes_r.is_empty() ).choose_stable(&mut rng){
+                let node_from = match self.nodes.iter().filter(|(_,n)| !n.free_nodes_r.is_empty() ).choose(&mut rng){
                     Some(n) => n,
                     None => return None,
                 };
@@ -371,15 +366,7 @@ impl NN {
         let mut rng = rand::rng();
         // randomly select node index, that have free paths and isn't output, if none return (full)
         match self.nodes.iter_mut().filter(|(_,n)| n.genre == Genre::Hidden ).choose(&mut rng){
-            Some((_,n)) => {
-                n.act_func = match rng.random_range(0..4) {
-                    0 => ActFunc::Sigmoid,
-                    1 => ActFunc::SigmoidBipolar,
-                    2 => ActFunc::Tanh,
-                    3 => ActFunc::ReLU,
-                    _ => unreachable!(),
-                };
-            },
+            Some((_,n)) => n.act_func = ActFunc::random(&self.functions_allowed),
             None => return,
         };
     }
@@ -403,7 +390,9 @@ impl NN {
                     *target_node != current_node && 
                     // disables (recurrent) connections to itself
                     (current_node.genre != Genre::Input || target_node.genre != Genre::Input) &&
-                    (current_node.genre != Genre::Output || target_node.genre != Genre::Output)
+                    (current_node.genre != Genre::Output || target_node.genre != Genre::Output) &&
+                    !(current_node.genre == Genre::Output && target_node.genre == Genre::Input)
+                    //(self.get_node_layer(current_key) < self.get_node_layer(target_key))
                     // disable recurrence between layer elements 
                     }).map(|(k, _)| k.clone() )
                 )
@@ -425,6 +414,7 @@ impl NN {
                     !outgoing.get(&current_key).map_or(false, |set| set.contains(&target_key)) && 
                     // excludes existing connections 
                     (current_node.genre != Genre::Input || target_node.genre != Genre::Input)
+                    //(self.get_node_layer(current_key) >= self.get_node_layer(target_key))
                     // disable recurrence between input layer elements 
                     }).map(|(k, _)| k.clone() )
                 )

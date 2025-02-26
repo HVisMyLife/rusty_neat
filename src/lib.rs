@@ -7,7 +7,7 @@ mod node;
 mod nn;
 mod neat;
 
-pub use neat::NeatHandler;
+pub use neat::{NeatIntermittent, NeatContinous};
 pub use nn::NN;
 pub use connection::Connection;
 pub use node::{Node, ActFunc, NodeKey, Genre};
@@ -18,11 +18,9 @@ pub use svg::svg_nn;
 // inspiration
 
 // TODO's:
-// - gates with stable 0
-// - comparing nn's 
-// - crossovers
 // - gates visualisation
-// - 
+// - penalizing stagnation
+// - penalizing huge size growth with little fitness growth
 
 
 
