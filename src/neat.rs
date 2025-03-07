@@ -29,7 +29,7 @@ pub struct NeatContinous {
     pub agents: HashMap<usize, NN>,
     pub innov_id: usize,
     pub innov_table: HashMap<(NodeKey, NodeKey, bool), usize>, // recurrent flag
-    pub species_threshold: f32,  // difference threshold between species 
+    species_threshold: f32,  // difference threshold between species 
     pub species_amount: usize, // desired amount of speciec
     pub species_table: HashMap<usize, Species>
 } 
@@ -41,25 +41,31 @@ impl NeatContinous {
         (0..size).into_iter().for_each(|k| { agents.insert(k, agent.clone()); } );
         let mut s = Self { 
             agents,
-            innov_id: agent.size.0+agent.size.1+1, 
+            innov_id: agent.size.0+agent.size.1+1+agent.size_free.0+agent.size_free.1, 
             innov_table: HashMap::new(),
             species_threshold: 3.,
             species_amount: 5,
             species_table: HashMap::new()
         };
 
-        s.agents.par_iter_mut().for_each(|(_, a)|{ a.set_chances(&[0,1,0,0,0,0,0,0]); });
+        s.agents.par_iter_mut().for_each(|(_, a)|{ a.set_chances(&[0,1,0,0,0,0,0,0]); a.recurrence = false; });
         let keys: Vec<usize> = s.agents.keys().cloned().collect();
         for _ in 0..=(agent.size.0 + agent.size.1)/2 { for k in &keys {s.mutate(k);} }
-        s.agents.par_iter_mut().for_each(|(_, a)| { a.set_chances(agent.get_chances()); });
+        s.agents.par_iter_mut().for_each(|(_, a)| { a.set_chances(agent.get_chances()); a.recurrence = agent.recurrence; });
         s
+    }
+    pub fn add_input(&mut self) {
+        if ! self.agents.values_mut().all(|a| a.add_input() ) {panic!("No more space for inputs")}
+    }
+    pub fn add_output(&mut self) {
+        if ! self.agents.values_mut().all(|a| a.add_output() ) {panic!("No more space for outputs")}
     }
     pub fn offspring(&mut self, key: &usize) -> usize {
         let agent_0 = self.agents.get(key).unwrap();
         let child_key = self.agents.keys().max().unwrap() + 1;
 
         let (keys, fs): (Vec<usize>, Vec<f32>) = self.agents.iter().filter(|(_, a)| a.species == agent_0.species )
-            .map(|(k,a)| (k, a.fitness) ).collect(); // probabilities
+            .map(|(k,a)| (k, a.fitness+1.) ).collect(); // probabilities
             
         let mut rng = rand::rng();
 
@@ -68,6 +74,7 @@ impl NeatContinous {
         let mut child = agent_0.crossover(agent_1);
         child.active = true;
         self.agents.insert(child_key, child);
+        self.mutate(&child_key);
 
         child_key
     }
@@ -154,13 +161,27 @@ impl NeatContinous {
         self.species_threshold -= diff.clamp(-2., 2.);
     }
 
-    pub fn forward(&mut self, inputs: HashMap<usize, Vec<f32>>) {
+    pub fn check_integrity(&mut self, inputs: &HashMap<usize, Vec<f32>>){
+        let mut empty = vec![];
+        self.agents.keys().for_each(|k|{
+            match inputs.get(k) {
+                Some(_) => {}
+                None => empty.push(*k),
+            }
+        });
+        empty.iter().for_each(|k| {self.agents.remove(k);} );
+    }
+
+    pub fn forward(&mut self, inputs: &HashMap<usize, Vec<f32>>) {
         self.agents.par_iter_mut().for_each(|(k,a)|{
             if a.active {a.process_network(inputs.get(k).unwrap());}
         });
     }
     pub fn get_outputs(&self, key: &usize) -> &Vec<f32>{
         self.agents.get(&key).unwrap().get_outputs()
+    }
+    pub fn set_pruning(&mut self, enabled: bool, ratio: f32) {
+        self.agents.par_iter_mut().for_each(|(_,a)| a.set_pruning(enabled, ratio) );
     }
 }
 
@@ -169,7 +190,7 @@ pub struct NeatIntermittent {
     pub size: usize, // desired agents amount 
     pub innov_id: usize,
     pub innov_table: HashMap<(NodeKey, NodeKey, bool), usize>, // recurrent flag
-    pub species_threshold: f32,  // difference threshold between species 
+    species_threshold: f32,  // difference threshold between species 
     pub species_amount: usize, // desired amount of speciec
     pub species_table: HashMap<usize, Species>
 } 
@@ -183,9 +204,9 @@ impl NeatIntermittent {
         let mut s = Self { 
             agents,
             size,
-            innov_id: agent.size.0+agent.size.1+1, 
+            innov_id: agent.size.0+agent.size.1+1+agent.size_free.0+agent.size_free.1, 
             innov_table: HashMap::new(),
-        species_threshold: 3.,
+            species_threshold: 3.,
             species_amount: 5,
             species_table: HashMap::new()
         };
@@ -196,6 +217,12 @@ impl NeatIntermittent {
         s
     }
 
+    pub fn add_input(&mut self) {
+        if ! self.agents.iter_mut().all(|a| a.add_input() ) {panic!("No more space for inputs")}
+    }
+    pub fn add_output(&mut self) {
+        if ! self.agents.iter_mut().all(|a| a.add_output() ) {panic!("No more space for outputs")}
+    }
     // connections are the same only if they have same addresses AND appeared in the same gen 
     // another option is to use 2d global connection lookup table that is filled with innov id's 
     // option 1 is in original neat paper 
@@ -334,7 +361,7 @@ impl NeatIntermittent {
 
         self.agents = self.species_table.par_iter().flat_map(|(uuid, species)|{
             let (idxs, fs): (Vec<usize>, Vec<f32>) = self.agents.iter().enumerate().filter(|(_, a)| a.species == *uuid )
-                .map(|(ai,a)| (ai, a.fitness) ).collect(); // probabilities
+                .map(|(ai,a)| (ai, a.fitness+1.) ).collect(); // probabilities
             
             let mut rng = rand::rng();
             let mut agents: Vec<NN> = vec![];
@@ -351,7 +378,7 @@ impl NeatIntermittent {
         }).collect::<Vec<NN>>();
     }
 
-    pub fn forward(&mut self, inputs: Vec<Vec<f32>>) {
+    pub fn forward(&mut self, inputs: &Vec<Vec<f32>>) {
         self.agents.par_iter_mut().zip_eq(inputs.par_iter()).for_each(|(a, i)|{
             if a.active {a.process_network(i);}
         });
@@ -359,6 +386,10 @@ impl NeatIntermittent {
 
     pub fn get_outputs(&self, id: usize) -> &Vec<f32>{
         self.agents[id].get_outputs()
+    }
+    
+    pub fn set_pruning(&mut self, enabled: bool, ratio: f32) {
+        self.agents.par_iter_mut().for_each(|a| a.set_pruning(enabled, ratio) );
     }
 }
 

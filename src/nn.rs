@@ -16,11 +16,13 @@ pub struct NN {
     pub idle: HashSet<NodeKey>, // nodes without input connections 
     pub generation: usize, // generation number, just out of curiosity
     pub size: (usize, usize), // information
+    pub size_free: (usize, usize), // information
 
     outputs: Vec<f32>,
 
     chances: [usize; 8], // chances for mutations to happen, sum does NOT need to be equal 100
-    recurrence: bool,
+    pruning: (bool, f32),
+    pub recurrence: bool,
     pub function_io: ActFunc,
     pub functions_allowed: Vec<ActFunc>,
     pub fitness: f32,
@@ -29,7 +31,10 @@ pub struct NN {
 }
 
 impl NN {
-    pub fn new(input_count: usize, output_count: usize, recurrence: bool, function_io: ActFunc, functions_allowed: &[ActFunc]) -> Self { 
+    pub fn new(input_count: usize, output_count: usize, add_space: Option<(usize,usize)>, 
+        recurrence: bool, function_io: ActFunc, functions_allowed: &[ActFunc]
+    ) -> Self {
+        let add_space = match add_space {Some(a) => a, None => (0,0) };
         // create input and output nodes
         let mut n = HashMap::new();
         n.insert(
@@ -40,21 +45,22 @@ impl NN {
                 NodeKey::new(i, 0), 
                 Node::new(Genre::Input, &ActFunc::None)); 
         }
-        for i in input_count+1..input_count+output_count+1 { 
+        for i in input_count+1+add_space.0..input_count+output_count+1+add_space.0 { 
             n.insert(
                 NodeKey::new(i, 0), 
                 Node::new(Genre::Output, &function_io)); 
         }
-
         let mut s = Self { 
             nodes: n, 
             connections: HashMap::new(),
             layer_order: vec![], 
             idle: HashSet::new(),
             generation: 0,
-            size: (input_count+1, output_count),
+            size: (input_count + 1, output_count),
+            size_free: add_space,
             outputs: vec![0.; output_count],
             chances: [200, 20, 5, 10, 3, 0, 0, 0], // weight, ca, na, ga, gr, cn, cf, am
+            pruning: (false, 0.33),
             recurrence,
             function_io,
             functions_allowed: functions_allowed.to_vec(),
@@ -67,6 +73,24 @@ impl NN {
         s
     }
 
+    pub fn add_input(&mut self) -> bool {
+        if self.size_free.0 < 1 {return false}
+        let k = NodeKey::new(self.size.0, 0);
+        self.nodes.insert(k, Node::new(Genre::Input, &ActFunc::None));
+        self.size_free.0 -= 1;
+        self.size.0 += 1;
+        true
+    }
+
+    pub fn add_output(&mut self) -> bool {
+        if self.size_free.1 < 1 {return false}
+        let k = NodeKey::new(self.size.0 + self.size_free.0 + self.size.1, 0);
+        self.nodes.insert(k, Node::new(Genre::Output, &self.function_io));
+        self.size_free.1 -= 1;
+        self.size.1 += 1;
+        self.outputs.push(0.);
+        true
+    }
 // #########################################################################################################################################
     
     pub fn post_process(&mut self) {
@@ -141,7 +165,7 @@ impl NN {
     pub fn process_network(&mut self, inputs: &[f32]) -> &Vec<f32> {
         let mut key = NodeKey::new(0, 0);
         self.nodes.get_mut(&key).unwrap().value = 1.;
-        for i in 0..inputs.len() {
+        for i in 0..self.size.0-1 {
             key.sconn = i + 1;
             self.nodes.get_mut(&key).unwrap().value = inputs[i];
         }
@@ -158,7 +182,7 @@ impl NN {
         let mut key = NodeKey::new(0, 0);
         // return outputs
         self.outputs.iter_mut().enumerate().for_each(|(i, v)| {
-            key.sconn = self.size.0 + i;
+            key.sconn = self.size.0 + self.size_free.0 + i;
             *v = self.nodes.get(&key).unwrap().value;
         });
         &self.outputs
@@ -199,27 +223,83 @@ impl NN {
         self.generation += 1; // increment generation
 
         // choose mutation based on chances
-        let dist = WeightedIndex::new(&self.chances).unwrap();
         let mut rng = rand::rng();
 
         let mut n_conn = None;
         let mut n_node = None;
 
-        match dist.sample(&mut rng) {
-            0 => self.m_connection_weight(),
-            1 => {n_conn = self.m_connection_add();},
-            2 => {n_node = self.m_node_add();},
-            3 => self.m_connection_gater_add(),
-            4 => self.m_connection_gater_remove(),
-            5 => self.m_connection_enable(),
-            6 => self.m_connection_disable(),
-            7 => self.m_node_func(),
-            _ => unreachable!(),
+        if ! self.pruning.0 {
+            let dist = WeightedIndex::new(&self.chances).unwrap();
+            match dist.sample(&mut rng) {
+                0 => self.m_connection_weight(),
+                1 => {n_conn = self.m_connection_add();},
+                2 => {n_node = self.m_node_add();},
+                3 => self.m_connection_gater_add(),
+                4 => self.m_connection_gater_remove(),
+                5 => self.m_connection_enable(),
+                6 => self.m_connection_disable(),
+                7 => self.m_node_func(),
+                _ => unreachable!(),
+            }
+        }
+        else {
+            n_conn = self.prune(self.pruning.1 as f64);
         }
 
         self.sort_layers();
         self.free_nodes_calc();
         (n_conn, n_node)
+    }
+
+    // list of nodes, that have only one input, and another list only one output 
+    fn prune(&mut self, p: f64) -> Option<Connection>  {
+        let mut rng = rand::rng();
+        let mut out: Option<Connection> = None;
+
+        let mut counts: HashMap<NodeKey, (usize, usize)> = self.nodes.iter()
+            .filter(|(_,v)| v.genre == Genre::Hidden ).map(|(k, _)| (k.clone(), (0, 0)) ).collect();
+        self.connections.values().for_each(|v| {
+            counts.get_mut(&v.to).unwrap_or(&mut(0,0)).0 += 1;
+            counts.get_mut(&v.from).unwrap_or(&mut(0,0)).1 += 1;
+        } );
+
+        let d_nodes: HashSet<NodeKey> = counts.iter()
+            .filter(|(_, c)| c.0 == 1 && c.1 == 1 ).map(|(k,_)| k.clone() ).collect();
+        let d_conn: HashSet<usize> = self.connections.iter()
+            .filter(|(_,v)| counts.get(&v.to).unwrap_or(&(0, 0)).0 > 1 && counts.get(&v.from).unwrap_or(&(0, 0)).1 > 1 )
+            .map(|(k,_)| *k ).collect();
+
+        if d_nodes.len() > 0 && rng.random_bool(p) {
+            let key = d_nodes.iter().choose(&mut rng).unwrap();
+            let _node = self.nodes.remove(&key).unwrap();
+
+            let tbd1 = self.connections.iter().find(|(_,c)| c.to == *key ).unwrap();
+            let tbd1_copy = (*tbd1.0, tbd1.1.clone());
+            let tbd2 = self.connections.iter().find(|(_,c)| c.from == *key ).unwrap();
+            let tbd2_copy = (*tbd2.0, tbd2.1.clone());
+
+            self.connections.remove(&tbd1_copy.0);
+            self.connections.remove(&tbd2_copy.0);
+
+            // insert average connection, recurrent only if both removed are
+            self.connections.insert(
+                usize::MAX,
+                Connection::new(tbd1_copy.1.from.clone(), tbd2_copy.1.to.clone(), tbd1_copy.1.recurrent && tbd2_copy.1.recurrent)
+            );
+            let weight = (tbd1_copy.1.weight + tbd2_copy.1.weight) / 2.;
+            self.connections.get_mut(&usize::MAX).unwrap().weight = weight;
+            out = Some(self.connections.get(&usize::MAX).unwrap().clone());
+
+            // removing gating
+            self.connections.values_mut().filter(|v| v.gater.is_some() ).for_each(|v| {
+                if v.gater.clone().unwrap() == *key { v.gater = None; }
+            });
+        }
+        else if d_conn.len() > 0 {// deletes connections that should be inactive(but aren't)...
+            let key = d_conn.iter().choose(&mut rng).unwrap();
+            self.connections.remove(key);
+        }
+        out
     }
 
 // #########################################################################################################################################
@@ -527,6 +607,14 @@ impl NN {
     
     pub fn get_outputs(&self) -> &Vec<f32> {
         &self.outputs
+    }
+    
+    pub fn get_pruning(&self) -> &(bool, f32) {
+        &self.pruning
+    }
+    
+    pub fn set_pruning(&mut self, enabled: bool, ratio: f32) {
+        self.pruning = (enabled, ratio);
     }
 
     pub fn get_chances(&self) -> &[usize; 8] {

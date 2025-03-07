@@ -66,7 +66,7 @@ pub fn svg_nn(nn: &NN, save: bool, id: usize) -> String {
 
     let out = svg::Svg{0: objs, 1: size.0 as u32, 2: size.1 as u32}.to_string();
     if save {
-        let path = "nn".to_owned() + &id.to_string() + ".svg";
+        let path = "assets/nn".to_owned() + &id.to_string() + ".svg";
         fs::write(&path, out.clone()).unwrap();
     }
     out
