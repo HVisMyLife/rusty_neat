@@ -5,6 +5,8 @@ It may not be exact implementation of that alghoritm, but it's simple, fast, and
 
 Innovation numers aren't generation-specific, I'm using a global look-up hashmap, so if two connections "look" the same, they have also the same number. I'm not a big fan of approach from original paper, because in my test cases innovations were exploding. Moreover, continous variant is borderline impossible to achieve without at least some modifications.
 
+Crates lib will be updated when I finish bugfixing etc, so somewhere between few days and several years.
+
 ## NN visual representation 
 Network can be saved as .svg: blue connections are recurrent, thickness represents weight, and node 0 is a bias. Gating visualisation is something that I want to add, but I'm open to suggestions how to display it.
 ![example](https://github.com/HVisMyLife/rusty_neat/blob/master/data/nn.png)
