@@ -272,36 +272,59 @@ impl NN {
         let mut out: Option<Connection> = None;
 
         let mut counts: HashMap<NodeKey, (usize, usize, bool)> = self.nodes.iter()
-            .map(|(k, n)| (k.clone(), (0, 0, n.genre == Genre::Hidden)) ).collect();
-        self.connections.values().filter(|c| c.active ).for_each(|v| {
-            let n = if v.to == v.from {0} else {1}; // ignoring connections to itself
-            counts.get_mut(&v.to).unwrap().0 += n;
-            counts.get_mut(&v.from).unwrap().1 += n;
+            .map(|(k, n)| 
+                (
+                    k.clone(), 
+                    ( if n.genre == Genre::Input {1} else {0} , if n.genre == Genre::Output {1} else {0}, n.genre == Genre::Hidden)
+                ) 
+            ).collect();
+        self.connections.values().filter(|c| c.active && c.to != c.from ).for_each(|v| {
+            counts.get_mut(&v.to).unwrap().0 += 1;
+            counts.get_mut(&v.from).unwrap().1 += 1;
         } );
 
         let d_nodes: HashSet<NodeKey> = counts.iter()
             .filter(|(_, c)| c.0 == 1 && c.1 == 1 && c.2 ).map(|(k,_)| k.clone() ).collect();
-        let d_conn: HashSet<usize> = self.connections.iter()
-            .filter(|(_,v)| counts.get(&v.to).unwrap().0 > 1 && counts.get(&v.from).unwrap().1 > 1 )
-            .map(|(k,_)| *k ).collect();
+
+        //let d_conn: HashSet<usize> = self.connections.iter()
+        //    .filter(|(_,v)| (counts.get(&v.to).unwrap().0 > 1 && counts.get(&v.from).unwrap().1 > 1) || v.to == v.from )
+        //    .map(|(k,_)| *k ).collect();
+
+        let d_conn: HashSet<usize> = self.connections.iter().filter(|(ori_k, ori_v)|{
+            ori_v.to == ori_v.from ||
+            (self.connections.iter().find(|(k,v)| **k != **ori_k && v.to == ori_v.to && v.to != v.from && v.active ).is_some() &&
+            self.connections.iter().find(|(k,v)| **k != **ori_k && v.from == ori_v.from && v.to != v.from && v.active ).is_some() )
+        }).map(|(k,_)| *k).collect();
 
         if d_nodes.len() > 0 && rng.random_bool(p) {
             let key = d_nodes.iter().choose(&mut rng).unwrap();
             let _node = self.nodes.remove(&key).unwrap();
 
-            let tbd1 = self.connections.iter().find(|(_,c)| c.to == *key ).unwrap().1.clone();
-            let tbd2 = self.connections.iter().find(|(_,c)| c.from == *key ).unwrap().1.clone();
+            let tbd1 = self.connections.iter()
+                .find(|(_,c)| c.to == *key && c.to != c.from && c.active ).unwrap().1.clone();
+            let tbd2 = self.connections.iter()
+                .find(|(_,c)| c.from == *key && c.to != c.from && c.active && **c != tbd1 ).unwrap().1.clone();
 
             self.connections.retain(|_,c| c.to != *key && c.from != *key );
 
             // insert average connection, recurrent only if both removed are
-            self.connections.insert(
-                usize::MAX,
-                Connection::new(tbd1.from.clone(), tbd2.to.clone(), tbd1.recurrent && tbd2.recurrent)
-            );
-            let weight = (tbd1.weight + tbd2.weight) / 2.;
-            self.connections.get_mut(&usize::MAX).unwrap().weight = weight;
-            out = Some(self.connections.get(&usize::MAX).unwrap().clone());
+            if let Some((_,e_conn)) = self.connections.iter_mut()
+                .find(|(_,v)| v.from == tbd1.from && v.to == tbd2.to && (v.recurrent == (tbd1.recurrent && tbd2.recurrent)) ){
+                if e_conn.active {
+                    e_conn.weight = (e_conn.weight + (tbd1.weight + tbd2.weight)/2. )/2.;
+                } else {
+                    e_conn.active = true;
+                    e_conn.weight = (tbd1.weight + tbd2.weight)/2.;
+                }
+            } else {
+                self.connections.insert(
+                    usize::MAX,
+                    Connection::new(tbd1.from.clone(), tbd2.to.clone(), tbd1.recurrent && tbd2.recurrent)
+                );
+                let weight = (tbd1.weight + tbd2.weight) / 2.;
+                self.connections.get_mut(&usize::MAX).unwrap().weight = weight;
+                out = Some(self.connections.get(&usize::MAX).unwrap().clone());
+            }
 
             // removing gating
             self.connections.values_mut().filter(|v| v.gater.is_some() ).for_each(|v| {
@@ -310,7 +333,12 @@ impl NN {
         }
         else if d_conn.len() > 0 {
             let key = d_conn.iter().choose(&mut rng).unwrap();
+
             self.connections.remove(key);
+            //if k.to != k.from {
+            //    let _ = self.connections.values().find(|c| c.to == k.to && c.from != c.to ).unwrap();
+            //    let _ = self.connections.values().find(|c| c.from == k.from && c.from != c.to ).unwrap();
+            //}
         }
         out
     }
@@ -341,17 +369,15 @@ impl NN {
         let c = c.clone();
         
         // to new node conn receives weight 1
-        let a = self.connections.insert(
+        self.connections.insert(
             usize::MAX,
             Connection::new(c.from.clone(), key.clone(), c.recurrent)); // ID
         self.connections.get_mut(&usize::MAX).unwrap().assign_weight(1.);
         // from new node conn receives weight from deleted connection
-        let b = self.connections.insert(
+        self.connections.insert(
             usize::MAX-1,
             Connection::new(key.clone(), c.to.clone(), c.recurrent)); // ID
         self.connections.get_mut(&(usize::MAX-1)).unwrap().assign_weight(c.weight);
-
-        if a.is_some() || b.is_some() {panic!("Node insert_1 failed")}
 
         Some(( self.connections.get(&usize::MAX).unwrap().clone(), self.connections.get(&(usize::MAX-1)).unwrap().clone() ))
     }
@@ -368,11 +394,10 @@ impl NN {
                 };
                 let key_to = node_from.1.free_nodes_f.iter().choose(&mut rng).unwrap();
 
-                let a = self.connections.insert(
+                self.connections.insert(
                     usize::MAX,
                     Connection::new(node_from.0.clone(), key_to.clone(), false)
                 );
-                if a.is_some() {panic!("Conn insert failed")}
                 Some(self.connections.get(&usize::MAX).unwrap().clone())
             },
             false => { // recurrent
@@ -382,11 +407,10 @@ impl NN {
                 };
                 let key_to = node_from.1.free_nodes_r.iter().choose(&mut rng).unwrap();
 
-                let a = self.connections.insert(
+                self.connections.insert(
                     usize::MAX,
                     Connection::new(node_from.0.clone(), key_to.clone(), true)
                 );
-                if a.is_some() {panic!("Conn insert failed")}
                 Some(self.connections.get(&usize::MAX).unwrap().clone())
             }
         }
@@ -396,11 +420,13 @@ impl NN {
     pub fn correct_keys(&mut self, innov_id_1: usize, innov_id_2: usize) -> usize {
         let mut counter = 0; // tracks innovation incrementation
         if let Some(c) = self.connections.remove(&usize::MAX) {
-            self.connections.insert(innov_id_1, c);
+            let a = self.connections.insert(innov_id_1, c);
+            if a.is_some() {panic!("Conn insert failed")}
             counter += 1;
         }
         if let Some(c) = self.connections.remove(&(usize::MAX-1)) {
-            self.connections.insert(innov_id_2, c);
+            let a = self.connections.insert(innov_id_2, c);
+            if a.is_some() {panic!("Conn insert failed")}
             counter += 1;
         }
         counter
