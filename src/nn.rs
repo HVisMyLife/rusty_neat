@@ -22,7 +22,7 @@ pub struct NN {
 
     chances: [usize; 8], // chances for mutations to happen, sum does NOT need to be equal 100
     pruning: (bool, f32),
-    pub recurrence: bool,
+    pub recurrence: (bool, f32), // weight of new memory input
     pub function_io: ActFunc,
     pub functions_allowed: Vec<ActFunc>,
     pub fitness: f32,
@@ -32,7 +32,7 @@ pub struct NN {
 
 impl NN {
     pub fn new(input_count: usize, output_count: usize, add_space: Option<(usize,usize)>, 
-        recurrence: bool, function_io: ActFunc, functions_allowed: &[ActFunc]
+        recurrence: bool, new_data_weight_rec: f32, function_io: ActFunc, functions_allowed: &[ActFunc]
     ) -> Self {
         let add_space = match add_space {Some(a) => a, None => (0,0) };
         // create input and output nodes
@@ -61,7 +61,7 @@ impl NN {
             outputs: vec![0.; output_count],
             chances: [200, 20, 5, 10, 3, 0, 0, 0], // weight, ca, na, ga, gr, cn, cf, am
             pruning: (false, 0.33),
-            recurrence,
+            recurrence: (recurrence, new_data_weight_rec),
             function_io,
             functions_allowed: functions_allowed.to_vec(),
             fitness: 0.,
@@ -82,10 +82,10 @@ impl NN {
         true
     }
 
-    pub fn add_output(&mut self) -> bool {
+    pub fn add_output(&mut self, func: &ActFunc) -> bool {
         if self.size_free.1 < 1 {return false}
         let k = NodeKey::new(self.size.0 + self.size_free.0 + self.size.1, 0);
-        self.nodes.insert(k, Node::new(Genre::Output, &self.function_io));
+        self.nodes.insert(k, Node::new(Genre::Output, func));
         self.size_free.1 -= 1;
         self.size.1 += 1;
         self.outputs.push(0.);
@@ -113,7 +113,7 @@ impl NN {
         // TODO removing dead-ends
     }
 
-    pub fn compare(&self, nn: &NN, c1: f32, c2: f32, c3: f32) -> f32 {
+    pub fn compare(&self, nn: &NN, c1: f32, c2: f32, c3: f32, c4: f32) -> f32 {
         let mut g_e = 0;    // excess
         let mut g_d = 0;    // disjoint 
         let mut g_wd = 0.;  // sum of weight differences 
@@ -134,7 +134,19 @@ impl NN {
         let disjoint =  ( c2 * (g_d as f32) ) / ( amount as f32 );
         let weight = if g_m != 0  {c3 * ((g_wd as f32) / (g_m as f32) )} else {0.};
         //println!("e:{} , d:{} , w:{}", excess, disjoint, weight);
-        excess + disjoint + weight
+
+        let mut disjoint_nodes = 0.;
+        self.nodes.iter().for_each(|(s_k,s_n)|{
+            let opt = nn.nodes.get(s_k);
+            if let Some(o_n) = opt {
+                if s_n.genre != o_n.genre {disjoint_nodes += 1.;}
+            }
+        });
+        let nodes_max = self.nodes.len().max(nn.nodes.len());
+        disjoint_nodes /= nodes_max as f32;
+        disjoint_nodes *= c4;
+        
+        excess + disjoint + weight + disjoint_nodes // TODO: including gates
     }
 
     // fitness average / species size 
@@ -170,7 +182,9 @@ impl NN {
             self.nodes.get_mut(&key).unwrap().value = inputs[i];
         }
 
-        self.nodes.iter_mut().for_each(|(_, n)| n.value_old = n.value ); // for recurrents 
+        // smooth memory
+        self.nodes.iter_mut().for_each(
+            |(_, n)| n.value_old = n.value_old * (1. - self.recurrence.1) + n.value * self.recurrence.1 );
 
         let layer_order = self.layer_order.clone();
         for layer in &layer_order {
@@ -211,7 +225,6 @@ impl NN {
 
         // Apply activation function (e.g., sigmoid, tanh, ReLU)
         node.value = node.act_func.run(sum, node.value);
-        //node.value_gate = 1.0 / (1.0 + (-sum).exp());
         node.value_gate = (0.2 * sum + 0.5).clamp(0., 1.); // faster than sigmoid 
     }
 
@@ -251,42 +264,41 @@ impl NN {
         (n_conn, n_node)
     }
 
+    // TODO: nodes without input connections AND/OR output connections
+
     // list of nodes, that have only one input, and another list only one output 
     fn prune(&mut self, p: f64) -> Option<Connection>  {
         let mut rng = rand::rng();
         let mut out: Option<Connection> = None;
 
-        let mut counts: HashMap<NodeKey, (usize, usize)> = self.nodes.iter()
-            .filter(|(_,v)| v.genre == Genre::Hidden ).map(|(k, _)| (k.clone(), (0, 0)) ).collect();
-        self.connections.values().for_each(|v| {
-            counts.get_mut(&v.to).unwrap_or(&mut(0,0)).0 += 1;
-            counts.get_mut(&v.from).unwrap_or(&mut(0,0)).1 += 1;
+        let mut counts: HashMap<NodeKey, (usize, usize, bool)> = self.nodes.iter()
+            .map(|(k, n)| (k.clone(), (0, 0, n.genre == Genre::Hidden)) ).collect();
+        self.connections.values().filter(|c| c.active ).for_each(|v| {
+            counts.get_mut(&v.to).unwrap().0 += 1;
+            counts.get_mut(&v.from).unwrap().1 += 1;
         } );
 
         let d_nodes: HashSet<NodeKey> = counts.iter()
-            .filter(|(_, c)| c.0 == 1 && c.1 == 1 ).map(|(k,_)| k.clone() ).collect();
+            .filter(|(_, c)| c.0 == 1 && c.1 == 1 && c.2 ).map(|(k,_)| k.clone() ).collect();
         let d_conn: HashSet<usize> = self.connections.iter()
-            .filter(|(_,v)| counts.get(&v.to).unwrap_or(&(0, 0)).0 > 1 && counts.get(&v.from).unwrap_or(&(0, 0)).1 > 1 )
+            .filter(|(_,v)| counts.get(&v.to).unwrap().0 > 1 && counts.get(&v.from).unwrap().1 > 1 )
             .map(|(k,_)| *k ).collect();
 
         if d_nodes.len() > 0 && rng.random_bool(p) {
             let key = d_nodes.iter().choose(&mut rng).unwrap();
             let _node = self.nodes.remove(&key).unwrap();
 
-            let tbd1 = self.connections.iter().find(|(_,c)| c.to == *key ).unwrap();
-            let tbd1_copy = (*tbd1.0, tbd1.1.clone());
-            let tbd2 = self.connections.iter().find(|(_,c)| c.from == *key ).unwrap();
-            let tbd2_copy = (*tbd2.0, tbd2.1.clone());
+            let tbd1 = self.connections.iter().find(|(_,c)| c.to == *key ).unwrap().1.clone();
+            let tbd2 = self.connections.iter().find(|(_,c)| c.from == *key ).unwrap().1.clone();
 
-            self.connections.remove(&tbd1_copy.0);
-            self.connections.remove(&tbd2_copy.0);
+            self.connections.retain(|_,c| c.to != *key && c.from != *key );
 
             // insert average connection, recurrent only if both removed are
             self.connections.insert(
                 usize::MAX,
-                Connection::new(tbd1_copy.1.from.clone(), tbd2_copy.1.to.clone(), tbd1_copy.1.recurrent && tbd2_copy.1.recurrent)
+                Connection::new(tbd1.from.clone(), tbd2.to.clone(), tbd1.recurrent && tbd2.recurrent)
             );
-            let weight = (tbd1_copy.1.weight + tbd2_copy.1.weight) / 2.;
+            let weight = (tbd1.weight + tbd2.weight) / 2.;
             self.connections.get_mut(&usize::MAX).unwrap().weight = weight;
             out = Some(self.connections.get(&usize::MAX).unwrap().clone());
 
@@ -295,7 +307,7 @@ impl NN {
                 if v.gater.clone().unwrap() == *key { v.gater = None; }
             });
         }
-        else if d_conn.len() > 0 {// deletes connections that should be inactive(but aren't)...
+        else if d_conn.len() > 0 {
             let key = d_conn.iter().choose(&mut rng).unwrap();
             self.connections.remove(key);
         }
@@ -313,29 +325,33 @@ impl NN {
 
         let mut rng = rand::rng();
         // get connection to be replaced
-        let c_key = match self.connections.iter_mut().filter(|(_,c)| c.active).choose_stable(&mut rng) { // f recurrent
+        let c_key = match self.connections.iter_mut().filter(|(_,c)| c.active).choose(&mut rng) { // f recurrent
             Some(c) => c.0.clone(),
             None => return None,
         };
         let dup = self.nodes.keys().filter(|k| k.sconn == c_key ).count();
         let key = NodeKey::new(c_key, dup);
-        self.nodes.insert(
+        let o = self.nodes.insert(
             key.clone(),
             Node::new(Genre::Hidden, &self.function_io));
+        if o.is_some() {panic!("Node insert_0 failed")}
         let c = self.connections.get_mut(&c_key).unwrap();
         c.active = false;
         let c = c.clone();
         
         // to new node conn receives weight 1
-        self.connections.insert(
+        let a = self.connections.insert(
             usize::MAX,
             Connection::new(c.from.clone(), key.clone(), c.recurrent)); // ID
         self.connections.get_mut(&usize::MAX).unwrap().assign_weight(1.);
         // from new node conn receives weight from deleted connection
-        self.connections.insert(
+        let b = self.connections.insert(
             usize::MAX-1,
             Connection::new(key.clone(), c.to.clone(), c.recurrent)); // ID
         self.connections.get_mut(&(usize::MAX-1)).unwrap().assign_weight(c.weight);
+
+        if a.is_some() || b.is_some() {panic!("Node insert_1 failed")}
+
         Some(( self.connections.get(&usize::MAX).unwrap().clone(), self.connections.get(&(usize::MAX-1)).unwrap().clone() ))
     }
 
@@ -343,7 +359,7 @@ impl NN {
     fn m_connection_add(&mut self) -> Option<Connection> {
         let mut rng = rand::rng();
         // randomly select node index, that have free paths and isn't output, if none return (full)
-        match !(rng.random_ratio(1, 4) && self.recurrence) {
+        match !(rng.random_ratio(1, 3) && self.recurrence.0) {
             true => { // feedforward
                 let node_from = match self.nodes.iter().filter(|(_,n)| !n.free_nodes_f.is_empty() ).choose(&mut rng){
                     Some(n) => n,
@@ -351,10 +367,11 @@ impl NN {
                 };
                 let key_to = node_from.1.free_nodes_f.iter().choose(&mut rng).unwrap();
 
-                self.connections.insert(
+                let a = self.connections.insert(
                     usize::MAX,
                     Connection::new(node_from.0.clone(), key_to.clone(), false)
                 );
+                if a.is_some() {panic!("Conn insert failed")}
                 Some(self.connections.get(&usize::MAX).unwrap().clone())
             },
             false => { // recurrent
@@ -364,10 +381,11 @@ impl NN {
                 };
                 let key_to = node_from.1.free_nodes_r.iter().choose(&mut rng).unwrap();
 
-                self.connections.insert(
+                let a = self.connections.insert(
                     usize::MAX,
                     Connection::new(node_from.0.clone(), key_to.clone(), true)
                 );
+                if a.is_some() {panic!("Conn insert failed")}
                 Some(self.connections.get(&usize::MAX).unwrap().clone())
             }
         }
@@ -381,7 +399,7 @@ impl NN {
             counter += 1;
         }
         if let Some(c) = self.connections.remove(&(usize::MAX-1)) {
-            self.connections.insert(innov_id_2 + counter, c);
+            self.connections.insert(innov_id_2, c);
             counter += 1;
         }
         counter
@@ -453,7 +471,7 @@ impl NN {
 
 // #########################################################################################################################################
 
-    fn free_nodes_calc(&mut self) {
+    pub fn free_nodes_calc(&mut self) {
         // List of outgoing connections from each node  
         let mut outgoing: HashMap<NodeKey, HashSet<NodeKey>> = HashMap::new();
         self.connections.iter().filter(|(_,c)| !c.recurrent ).for_each(|c|{ 
@@ -516,7 +534,7 @@ impl NN {
     //  - loops aren't a big deal in a continuous environment so they are ignored
     //  - only recurrent nodes order are based on layer of closest node in layer order 
     // The feedforward approach should promote more stability, while recurrent approach even if arbitrary, should guarantee visual pretteness ;)
-    fn sort_layers(&mut self) {
+    pub fn sort_layers(&mut self) {
         self.layer_order.clear();
         let layer_0: HashSet<NodeKey> = self.nodes.iter().filter(|(_,n)| n.genre == Genre::Input ).map(|(k,_)|k.clone()).collect();
         self.layer_order.push(layer_0.clone());
@@ -690,7 +708,7 @@ impl fmt::Debug for NN {
         l += "]\n";
         l += &("Gen: ".to_string() + &self.generation.to_string() + "\n");
         l += &(format!("Chances: {:?}", self.chances) + "\n");
-        l += &("Recurrence: ".to_string() + &self.recurrence.to_string() + "\n");
+        l += &("Recurrence: ".to_string() + &self.recurrence.0.to_string() + &format!("| {:>.2}", self.recurrence.1) + "\n");
         l += &("Species: ".to_string() + &format!("{}", self.species) + "\n" );
         l += &("Fitness: ".to_string() + &format!("{:.3}", self.fitness) + "\n" );
         write!(fmt, "{}", l)

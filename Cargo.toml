@@ -1,13 +1,13 @@
 [package]
 name = "rusty_neat"
-version = "0.1.0"
-edition = "2021"
+version = "0.2.0"
+edition = "2024"
 description = "Simple NEAT lib"
 readme = "README.md"
 license-file = "LICENSE.md"
 homepage = "https://github.com/HVisMyLife/rusty_neat"
 repository = "https://github.com/HVisMyLife/rusty_neat"
-keywords = ["neat", "neural_network", "ai"]
+keywords = ["neat", "neural_network", "ai", "gates", "recurrency"]
 categories = ["mathematics"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

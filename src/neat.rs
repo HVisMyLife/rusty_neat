@@ -4,13 +4,13 @@ use itertools::Itertools;
 use rand_distr::{weighted::WeightedIndex, Distribution};
 use rayon::prelude::*;
 
-use crate::{nn::NN, node::NodeKey, Connection};
+use crate::{nn::NN, node::NodeKey, ActFunc, Connection};
 
 pub struct Species {
     fitness: f32,
-    size: usize,
-    offspring: usize,
-    history_fitness: VecDeque<f32>
+    pub size: usize,
+    pub offspring: usize,
+    history_fitness: VecDeque<f32>,
 }
 
 impl Species {
@@ -29,13 +29,13 @@ pub struct NeatContinous {
     pub agents: HashMap<usize, NN>,
     pub innov_id: usize,
     pub innov_table: HashMap<(NodeKey, NodeKey, bool), usize>, // recurrent flag
-    species_threshold: f32,  // difference threshold between species 
+    pub species_threshold: f32,  // difference threshold between species 
     pub species_amount: usize, // desired amount of speciec
     pub species_table: HashMap<usize, Species>
 } 
 
 impl NeatContinous {
-    pub fn new(agent: &NN, size: usize) -> Self {
+    pub fn new(agent: &NN, size: usize, species_amount: usize) -> Self {
         //let agents = (0..size).into_iter().map(|_| agent.clone() ).collect();
         let mut agents = HashMap::new();
         (0..size).into_iter().for_each(|k| { agents.insert(k, agent.clone()); } );
@@ -44,11 +44,11 @@ impl NeatContinous {
             innov_id: agent.size.0+agent.size.1+1+agent.size_free.0+agent.size_free.1, 
             innov_table: HashMap::new(),
             species_threshold: 3.,
-            species_amount: 5,
+            species_amount,
             species_table: HashMap::new()
         };
 
-        s.agents.par_iter_mut().for_each(|(_, a)|{ a.set_chances(&[0,1,0,0,0,0,0,0]); a.recurrence = false; });
+        s.agents.par_iter_mut().for_each(|(_, a)|{ a.set_chances(&[0,1,0,0,0,0,0,0]); a.recurrence.0 = false; });
         let keys: Vec<usize> = s.agents.keys().cloned().collect();
         for _ in 0..=(agent.size.0 + agent.size.1)/2 { for k in &keys {s.mutate(k);} }
         s.agents.par_iter_mut().for_each(|(_, a)| { a.set_chances(agent.get_chances()); a.recurrence = agent.recurrence; });
@@ -57,8 +57,8 @@ impl NeatContinous {
     pub fn add_input(&mut self) {
         if ! self.agents.values_mut().all(|a| a.add_input() ) {panic!("No more space for inputs")}
     }
-    pub fn add_output(&mut self) {
-        if ! self.agents.values_mut().all(|a| a.add_output() ) {panic!("No more space for outputs")}
+    pub fn add_output(&mut self, func: &ActFunc) {
+        if ! self.agents.values_mut().all(|a| a.add_output(func) ) {panic!("No more space for outputs")}
     }
     pub fn offspring(&mut self, key: &usize) -> usize {
         let agent_0 = self.agents.get(key).unwrap();
@@ -75,6 +75,7 @@ impl NeatContinous {
         child.active = true;
         self.agents.insert(child_key, child);
         self.mutate(&child_key);
+        //self.species_assign(&child_key); // assign to species 
 
         child_key
     }
@@ -109,6 +110,52 @@ impl NeatContinous {
             assert!(agent.correct_keys(*correct0, *correct1) == 2);
         }
     }
+
+    // ********************************************************************************************
+    // assign agent to species 
+    pub fn species_assign(&mut self, key: &usize) -> usize {
+        self.species_prune();
+        let mut species = None;
+        let reference = self.agents.get(key).unwrap();
+
+        // for loop needed bc continue/break doesn't work in for_each 
+        // sorted from smallest species to promote them
+        for s in self.species_table.iter_mut().sorted_by_key(|(_,s)| s.size ) {
+            match self.agents.values().find(|a| a.species == *s.0 ) {
+                Some(a) => {
+                    if a.compare(reference, 1., 1., 0.4, 1.) < self.species_threshold {
+                        species = Some(a.species); break;
+                    } else {
+                        continue;
+                    }
+                }
+                None => continue,
+            }
+        }
+        if species.is_none() {
+            let uuid = self.species_table.keys().max().unwrap_or(&0) + 1;
+            self.species_table.insert(uuid, Species::new(1.));
+            species = Some(uuid);
+        }
+
+        self.agents.get_mut(key).unwrap().species = species.unwrap();
+        self.species_threshold_correct();
+        species.unwrap()
+    }
+    // correcting threshold to hit target
+    pub fn species_threshold_correct(&mut self) { 
+        // no need for more intelligent approach bc of frequent usage
+        if self.species_amount > self.species_table.len() + 1 { self.species_threshold -= 0.02 }
+        else if self.species_amount < self.species_table.len() - 1 { self.species_threshold += 0.02 }
+        self.species_threshold = self.species_threshold.clamp(0.1, 8.);
+    }
+    fn species_prune(&mut self) {
+        for s in &mut self.species_table {
+            s.1.size = self.agents.iter().filter(|(_, a)| a.species == *s.0 ).count();
+        }
+        self.species_table.retain(|_, s| s.size > 0 );
+    }
+    // used only at neat init
     pub fn speciate(&mut self){
         let mut refs = self.agents.iter_mut().map(|a| a).collect_vec();
         for s in &mut self.species_table {
@@ -122,7 +169,7 @@ impl NeatContinous {
 
             let mut assigned: Vec<usize> = vec![];
             refs.iter_mut().enumerate().for_each(|(i,(_, a))| {
-                let t = f.1.compare(a, 1., 1., 0.4);
+                let t = f.1.compare(a, 1., 1., 0.4, 1.);
                 if t < self.species_threshold { 
                     assigned.push(i);
                     a.species = f.1.species;
@@ -145,7 +192,7 @@ impl NeatContinous {
             // compare every leftover to the leader and assign if matches
             let mut assigned: Vec<usize> = vec![];
             refs.iter_mut().enumerate().for_each(|(i,(_, a))| {
-                let t = f.1.compare(a, 1., 1., 0.4);
+                let t = f.1.compare(a, 1., 1., 0.4, 1.);
                 if t < self.species_threshold { 
                     assigned.push(i);
                     a.species = uuid;
@@ -157,10 +204,10 @@ impl NeatContinous {
             
             uuid += 1;
         }
-        let diff = 1. - (self.species_table.len() as f32) / (self.species_amount as f32);
-        self.species_threshold -= diff.clamp(-2., 2.);
+        self.species_threshold_correct();
     }
-
+    // ********************************************************************************************
+    
     pub fn check_integrity(&mut self, inputs: &HashMap<usize, Vec<f32>>){
         let mut empty = vec![];
         self.agents.keys().for_each(|k|{
@@ -185,6 +232,7 @@ impl NeatContinous {
     }
 }
 
+
 pub struct NeatIntermittent {
     pub agents: Vec<NN>,
     pub size: usize, // desired agents amount 
@@ -199,7 +247,7 @@ impl NeatIntermittent {
     // there need to be minimal (>0) amount of connections at the start
     // but it needs to be done through mutate function, so innovation numbers are kept
     // so for mutation procedure the chances are modified as so each mutation results in new conn 
-    pub fn new(agent: &NN, size: usize) -> Self {
+    pub fn new(agent: &NN, size: usize, species_amount: usize) -> Self {
         let agents = (0..size).into_iter().map(|_| agent.clone() ).collect();
         let mut s = Self { 
             agents,
@@ -207,7 +255,7 @@ impl NeatIntermittent {
             innov_id: agent.size.0+agent.size.1+1+agent.size_free.0+agent.size_free.1, 
             innov_table: HashMap::new(),
             species_threshold: 3.,
-            species_amount: 5,
+            species_amount,
             species_table: HashMap::new()
         };
 
@@ -220,8 +268,8 @@ impl NeatIntermittent {
     pub fn add_input(&mut self) {
         if ! self.agents.iter_mut().all(|a| a.add_input() ) {panic!("No more space for inputs")}
     }
-    pub fn add_output(&mut self) {
-        if ! self.agents.iter_mut().all(|a| a.add_output() ) {panic!("No more space for outputs")}
+    pub fn add_output(&mut self, func: &ActFunc) {
+        if ! self.agents.iter_mut().all(|a| a.add_output(func) ) {panic!("No more space for outputs")}
     }
     // connections are the same only if they have same addresses AND appeared in the same gen 
     // another option is to use 2d global connection lookup table that is filled with innov id's 
@@ -300,7 +348,7 @@ impl NeatIntermittent {
 
             let mut assigned: Vec<usize> = vec![];
             refs.iter_mut().enumerate().for_each(|(i,a)| {
-                let t = f.compare(a, 1., 1., 0.4);
+                let t = f.compare(a, 1., 1., 0.4, 1.);
                 if t < self.species_threshold { 
                     assigned.push(i);
                     a.species = f.species;
@@ -323,7 +371,7 @@ impl NeatIntermittent {
             // compare every leftover to the leader and assign if matches
             let mut assigned: Vec<usize> = vec![];
             refs.iter_mut().enumerate().for_each(|(i,a)| {
-                let t = f.compare(a, 1., 1., 0.4);
+                let t = f.compare(a, 1., 1., 0.4, 1.);
                 if t < self.species_threshold { 
                     assigned.push(i);
                     a.species = uuid;
