@@ -274,8 +274,9 @@ impl NN {
         let mut counts: HashMap<NodeKey, (usize, usize, bool)> = self.nodes.iter()
             .map(|(k, n)| (k.clone(), (0, 0, n.genre == Genre::Hidden)) ).collect();
         self.connections.values().filter(|c| c.active ).for_each(|v| {
-            counts.get_mut(&v.to).unwrap().0 += 1;
-            counts.get_mut(&v.from).unwrap().1 += 1;
+            let n = if v.to == v.from {0} else {1}; // ignoring connections to itself
+            counts.get_mut(&v.to).unwrap().0 += n;
+            counts.get_mut(&v.from).unwrap().1 += n;
         } );
 
         let d_nodes: HashSet<NodeKey> = counts.iter()
