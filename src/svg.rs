@@ -3,7 +3,7 @@ use itertools::Itertools;
 use simplesvg as svg;
 use std::{collections::HashMap, fs};
 
-pub fn svg_nn(nn: &NN, save: bool, id: usize) -> String {
+pub fn svg_nn(nn: &NN, save_path: Option<&str>) -> String {
     let mut objs: Vec<svg::Fig> = vec![];
     let mut positions: HashMap<NodeKey, (f32, f32)> = HashMap::new();
     nn.nodes.iter().for_each(|(key, _)|{ positions.insert(key.clone(), (0.,0.)); });
@@ -65,8 +65,7 @@ pub fn svg_nn(nn: &NN, save: bool, id: usize) -> String {
     objs.insert(0, bg);
 
     let out = svg::Svg{0: objs, 1: size.0 as u32, 2: size.1 as u32}.to_string();
-    if save {
-        let path = "assets/nn".to_owned() + &id.to_string() + ".svg";
+    if let Some(path) = save_path {
         fs::write(&path, out.clone()).unwrap();
     }
     out
