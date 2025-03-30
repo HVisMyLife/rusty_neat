@@ -28,3 +28,8 @@ nsvg = { version = "^0.5", optional = true }
 
 [features]
 visu = ["dep:simplesvg", "dep:usvg", "dep:nsvg"]
+
+[package.metadata.docs.rs]
+features = ["visu", "simplesvg", "usvg", "nsvg"]
+# [package.metadata.crates.io]
+# features = ["visu", "simplesvg", "usvg", "nsvg"]

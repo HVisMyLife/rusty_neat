@@ -1,8 +1,8 @@
 # rusty_neat
 
 [![GitHub tag](https://img.shields.io/github/tag/HVisMyLife/rusty_neat?include_prereleases=&sort=semver&color=blue)](https://github.com/HVisMyLife/rusty_neat/releases/)
-[![License](https://img.shields.io/badge/License-GPL--3.0-blue)](#license)
-[![view - Docs](https://img.shields.io/badge/view-Documentation-blue?style=for-the-badge)](https://docs.rs/rusty_neat/0.2.0/rusty_neat/)
+[![License](https://img.shields.io/badge/License-GPL--3.0-blue)](https://github.com/HVisMyLife/rusty_neat/blob/master/LICENSE.md)
+![crates.io](https://img.shields.io/crates/v/rusty_neat.svg)
 
 Library for handling Neuroevolution of augmenting topologies.
 
@@ -43,7 +43,7 @@ By gradually including harder to utilise inputs networks can learn complex envir
 
 Here you have example project that uses it to train "cars" ride along random track: <https://github.com/HVisMyLife/neat_race>.
 
-There is also ecosystem simulation that uses continous variant, but it's currently resting in development hell: <https://github.com/HVisMyLife/sectarii>
+There is also ecosystem simulation that uses continous variant, but it's currently deep in development hell: <https://github.com/HVisMyLife/sectarii>
 
 ## Exaple usage:
 
