@@ -7,7 +7,7 @@ readme = "README.md"
 license-file = "LICENSE.md"
 homepage = "https://github.com/HVisMyLife/rusty_neat"
 repository = "https://github.com/HVisMyLife/rusty_neat"
-keywords = ["neat", "neural_network", "neuroevolution", "ai", "gates", "recurrency"]
+keywords = ["neat", "neural_network", "neuroevolution", "AI", "gating"]
 categories = ["mathematics"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
