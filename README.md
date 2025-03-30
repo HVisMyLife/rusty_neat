@@ -1,6 +1,6 @@
 # rusty_neat
 
-[![GitHub tag](https://img.shields.io/github/tag/HVisMyLife/rusty_neat?include_prereleases=&sort=semver&color=blue)](https://github.com/HVisMyLife/rusty_neat/releases/)
+[![GitHub tag](https://img.shields.io/github/tag/HVisMyLife/rusty_neat?include_prereleases=&sort=semver&color=blue)](https://github.com/HVisMyLife/rusty_neat/tags/)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue)](https://github.com/HVisMyLife/rusty_neat/blob/master/LICENSE.md)
 [![crates.io](https://img.shields.io/crates/v/rusty_neat.svg)](https://docs.rs/rusty_neat/0.2.1/rusty_neat/)
 
