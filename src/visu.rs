@@ -5,7 +5,12 @@ use std::{collections::HashMap, fs};
 use simplesvg as svg;
 use usvg::{self, TreeParsing, TreeTextToPath, TreeWriting};
 
-
+/** 
+ Included in optional feature "visu".
+ Takes reference to neural network and optional path to save it.
+ If path is None, function skips saving to file, 
+ otherwise image format is derived from path extension (svg, png, jpg).
+*/ 
 pub fn visu(nn: &NN, save_path: Option<&str>) -> String {
     let mut objs: Vec<svg::Fig> = vec![];
     let mut positions: HashMap<NodeKey, (f32, f32)> = HashMap::new();

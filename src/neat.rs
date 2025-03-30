@@ -6,13 +6,13 @@ use rayon::prelude::*;
 
 use crate::{nn::NN, node::NodeKey, ActFunc, Connection};
 
+// Single species data.
 pub struct Species {
     fitness: f32,
     pub size: usize,
     pub offspring: usize,
     history_fitness: VecDeque<f32>,
 }
-
 impl Species {
     pub fn new(fitness: f32) -> Self {
         Self { fitness, size: 0, offspring: 0, history_fitness: VecDeque::from_iter(std::iter::repeat(0.).take(20)) }
@@ -25,18 +25,28 @@ impl fmt::Debug for Species {
     }
 }
 
+/**
+Struct for handling real-time neuroevolution.
+Time isn't divided by generations, instead each entity produces offspring on-the-run.
+Great for ecosystem simulation.
+*/
 pub struct NeatContinous {
+    /// HashMap of all networks.
     pub agents: HashMap<usize, NN>,
+    /// First free innovation number.
     pub innov_id: usize,
-    pub innov_table: HashMap<(NodeKey, NodeKey, bool), usize>, // recurrent flag
-    pub species_threshold: f32,  // difference threshold between species 
-    pub species_amount: usize, // desired amount of speciec
+    /// If connection have the same souce, destination, and recurrency, it has also same id.
+    pub innov_table: HashMap<(NodeKey, NodeKey, bool), usize>,
+    /// Below this threshold agents are assigned to the same species.
+    pub species_threshold: f32,
+    /// Desired amout of species in ecosystem.
+    pub species_amount: usize,
+    /// HashMap of all non-empty species.
     pub species_table: HashMap<usize, Species>
 } 
-
 impl NeatContinous {
+    /// Each agent is a clone, but with it's own (random) initial genes.
     pub fn new(agent: &NN, size: usize, species_amount: usize) -> Self {
-        //let agents = (0..size).into_iter().map(|_| agent.clone() ).collect();
         let mut agents = HashMap::new();
         (0..size).into_iter().for_each(|k| { agents.insert(k, agent.clone()); } );
         let mut s = Self { 
@@ -54,12 +64,16 @@ impl NeatContinous {
         s.agents.par_iter_mut().for_each(|(_, a)| { a.set_chances(agent.get_chances()); a.recurrence = agent.recurrence; });
         s
     }
+    /// Panics if any agent have no free space.
     pub fn add_input(&mut self) {
         if ! self.agents.values_mut().all(|a| a.add_input() ) {panic!("No more space for inputs")}
     }
+    /// Panics if any agent have no free space.
     pub fn add_output(&mut self, func: &ActFunc) {
         if ! self.agents.values_mut().all(|a| a.add_output(func) ) {panic!("No more space for outputs")}
     }
+    /// Creates new agent by crossing key's with other from the same species.
+    /// Probably good idea to assign species to it right after.
     pub fn offspring(&mut self, key: &usize) -> usize {
         let agent_0 = self.agents.get(key).unwrap();
         let child_key = self.agents.keys().max().unwrap() + 1;
@@ -79,6 +93,7 @@ impl NeatContinous {
 
         child_key
     }
+    /// Mutates agent and corrects innovation numbers (if needed).
     pub fn mutate(&mut self, key: &usize) {
         let agent = &mut self.agents.get_mut(key).unwrap();
         let ( n_conn, n_node) = agent.mutate();
@@ -112,7 +127,7 @@ impl NeatContinous {
     }
 
     // ********************************************************************************************
-    // assign agent to species 
+    /// Assigns agent to species according to threshold. 
     pub fn species_assign(&mut self, key: &usize) -> usize {
         self.species_prune();
         let mut species = None;
@@ -142,7 +157,8 @@ impl NeatContinous {
         self.species_threshold_correct();
         species.unwrap()
     }
-    // correcting threshold to hit target
+    /// Corrects threshold to hit target amout of species.
+    /// Should be run after every offspring.
     pub fn species_threshold_correct(&mut self) { 
         // no need for more intelligent approach bc of frequent usage
         if self.species_amount > self.species_table.len() + 1 { self.species_threshold -= 0.02 }
@@ -155,7 +171,8 @@ impl NeatContinous {
         }
         self.species_table.retain(|_, s| s.size > 0 );
     }
-    // used only at neat init
+    /// In continous type it's used only at init.
+    /// Should be run several times, if you want to hit target amount of species.
     pub fn speciate(&mut self){
         let mut refs = self.agents.iter_mut().map(|a| a).collect_vec();
         for s in &mut self.species_table {
@@ -208,6 +225,8 @@ impl NeatContinous {
     }
     // ********************************************************************************************
     
+    /// Removes agents, that do not have input vector.
+    /// Should be run before every forward(), if any agent could have died.
     pub fn check_integrity(&mut self, inputs: &HashMap<usize, Vec<f32>>){
         let mut empty = vec![];
         self.agents.keys().for_each(|k|{
@@ -219,34 +238,51 @@ impl NeatContinous {
         empty.iter().for_each(|k| {self.agents.remove(k);} );
     }
 
+    /// Takes inputs for each agent, and runs it.
     pub fn forward(&mut self, inputs: &HashMap<usize, Vec<f32>>) {
         self.agents.par_iter_mut().for_each(|(k,a)|{
             if a.active {a.process_network(inputs.get(k).unwrap());}
         });
     }
+    /// Gets single network's output node's value's.
     pub fn get_outputs(&self, key: &usize) -> &Vec<f32>{
         self.agents.get(&key).unwrap().get_outputs()
     }
+    /// If enabled each mutation deletes node or connection.
+    /// Ratio of 0.1 means, that there is 10% chance of deleting node
+    /// , and 90% of deleting connection.
     pub fn set_pruning(&mut self, enabled: bool, ratio: f32) {
         self.agents.par_iter_mut().for_each(|(_,a)| a.set_pruning(enabled, ratio) );
     }
 }
 
 
+/**
+Struct for handling generation-based neuroevolution.
+Time is divided in evaluation runs.
+Great for training networks to do well defined tasks.
+*/
 pub struct NeatIntermittent {
     pub agents: Vec<NN>,
-    pub size: usize, // desired agents amount 
+    /// First free innovation number.
+    pub size: usize,
+    /// First free innovation number.
     pub innov_id: usize,
-    pub innov_table: HashMap<(NodeKey, NodeKey, bool), usize>, // recurrent flag
-    species_threshold: f32,  // difference threshold between species 
-    pub species_amount: usize, // desired amount of speciec
+    /// If connection have the same souce, destination, and recurrency, it has also same id.
+    pub innov_table: HashMap<(NodeKey, NodeKey, bool), usize>,
+    /// Below this threshold agents are assigned to the same species.
+    pub species_threshold: f32,
+    /// Desired amout of species in ecosystem.
+    pub species_amount: usize, 
+    /// HashMap of all non-empty species.
     pub species_table: HashMap<usize, Species>
 } 
 
 impl NeatIntermittent {
     // there need to be minimal (>0) amount of connections at the start
     // but it needs to be done through mutate function, so innovation numbers are kept
-    // so for mutation procedure the chances are modified as so each mutation results in new conn 
+    // so for mutation procedure the chances are modified as so each mutation results in new conn
+    /// Each agent is a clone, but with it’s own (random) initial genes.
     pub fn new(agent: &NN, size: usize, species_amount: usize) -> Self {
         let agents = (0..size).into_iter().map(|_| agent.clone() ).collect();
         let mut s = Self { 
@@ -265,9 +301,11 @@ impl NeatIntermittent {
         s
     }
 
+    /// Panics if any agent have no free space.
     pub fn add_input(&mut self) {
         if ! self.agents.iter_mut().all(|a| a.add_input() ) {panic!("No more space for inputs")}
     }
+    /// Panics if any agent have no free space.
     pub fn add_output(&mut self, func: &ActFunc) {
         if ! self.agents.iter_mut().all(|a| a.add_output(func) ) {panic!("No more space for outputs")}
     }
@@ -275,6 +313,8 @@ impl NeatIntermittent {
     // another option is to use 2d global connection lookup table that is filled with innov id's 
     // option 1 is in original neat paper 
     // at the moment using 2, bc otherwise innovation numbers explode
+    /// Mutates agent and corrects innovation numbers (if needed).
+    /// If "single" is provided, only agent with that index is mutated.
     pub fn mutate(&mut self, single: Option<usize>) {
         let mut all_n_conn: Vec<(usize, Connection)> = vec![]; // NN idx, added conn (from, to)
         let mut all_n_node: Vec<(usize, ( Connection, Connection ))> = vec![]; // NN idx, splitted conn innovation number
@@ -335,6 +375,8 @@ impl NeatIntermittent {
         });
     }
 
+    /// Assigns all agents to species, and corrects threshold.
+    /// At init should be run few times.
     pub fn speciate(&mut self){
         let mut refs = self.agents.iter_mut().map(|a| a).collect_vec();
         for s in &mut self.species_table {
@@ -387,6 +429,8 @@ impl NeatIntermittent {
         self.species_threshold -= diff.clamp(-2., 2.);
     }
 
+    /// Creates new agent's generation. Each species have offspring size based on it's size and avg fitness.
+    /// Inside single species, higher fitness means more chance to become parent.
     pub fn next_gen(&mut self) {
 
         // species fitness 
@@ -426,16 +470,19 @@ impl NeatIntermittent {
         }).collect::<Vec<NN>>();
     }
 
+    /// Forwards inputs to all agents
     pub fn forward(&mut self, inputs: &Vec<Vec<f32>>) {
         self.agents.par_iter_mut().zip_eq(inputs.par_iter()).for_each(|(a, i)|{
             if a.active {a.process_network(i);}
         });
     }
 
+    /// Gets output node's value's of single agent.
     pub fn get_outputs(&self, id: usize) -> &Vec<f32>{
         self.agents[id].get_outputs()
     }
-    
+    /// If enabled each mutation deletes node or connection. 
+    /// Ratio of 0.1 means, that there is 10% chance of deleting node , and 90% of deleting connection.
     pub fn set_pruning(&mut self, enabled: bool, ratio: f32) {
         self.agents.par_iter_mut().for_each(|a| a.set_pruning(enabled, ratio) );
     }

@@ -8,6 +8,7 @@ use std::{collections::{HashMap, HashSet}, fmt, fs::File, io::{Read, Write}};
 
 use crate::{connection::Connection, node::{ActFunc, Genre, Node, NodeKey}};
 
+/// NEAT network representation.
 #[serde_as]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NN {
@@ -15,25 +16,40 @@ pub struct NN {
     pub nodes: HashMap<NodeKey, Node>, // key is a splited connection key + doubles protection
     #[serde_as(as = "Vec<(_, _)>")]
     pub connections: HashMap<usize, Connection>, // key is an innovation number
+    /// All nodes are layered for calculations.
+    /// Additionally it's usefull during visualisation generation.
     pub layer_order: Vec<HashSet<NodeKey>>, // layers for calculating values
-    pub idle: HashSet<NodeKey>, // nodes without input connections 
-    pub generation: usize, // generation number, just out of curiosity
-    pub size: (usize, usize), // information
-    pub size_free: (usize, usize), // information
+    /// orphaned nodes (without inputs)
+    pub idle: HashSet<NodeKey>,
+    /// Incremented after mutate.
+    pub generation: usize, 
+    /// Amount of input and output nodes.
+    pub size: (usize, usize),
+    /// leftover reserved space for inputs and outputs
+    pub size_free: (usize, usize),
 
     outputs: Vec<f32>,
 
     chances: [usize; 8], // chances for mutations to happen, sum does NOT need to be equal 100
     pruning: (bool, f32),
-    pub recurrence: (bool, f32), // weight of new memory input
+    /// Are recurrent connections allowed, and
+    /// how much new data influences node's memory.
+    /// Useful if you want more stable memory value.
+    /// value_old = value_old * (1. - recurrence.1) + value * recurrence.1 )
+    pub recurrence: (bool, f32),
+    /// default activaton function for nodes.
     pub function_io: ActFunc,
+    /// Vector of functions that can appear during mutations
     pub functions_allowed: Vec<ActFunc>,
+    /// Higher fitness gives higher chanceto become parent during crossover.
     pub fitness: f32,
+    /// Species ID.
     pub species: usize,
     pub active: bool,
 }
 
 impl NN {
+    /// add_space - how much space reserve for future add_input/output 
     pub fn new(input_count: usize, output_count: usize, add_space: Option<(usize,usize)>, 
         recurrence: bool, new_data_weight_rec: f32, function_io: ActFunc, functions_allowed: &[ActFunc]
     ) -> Self {
@@ -76,6 +92,7 @@ impl NN {
         s
     }
 
+    /// Adds input node, returns false if there is no space left.
     pub fn add_input(&mut self) -> bool {
         if self.size_free.0 < 1 {return false}
         let k = NodeKey::new(self.size.0, 0);
@@ -85,6 +102,7 @@ impl NN {
         true
     }
 
+    /// Adds output node, returns false if there is no space left.
     pub fn add_output(&mut self, func: &ActFunc) -> bool {
         if self.size_free.1 < 1 {return false}
         let k = NodeKey::new(self.size.0 + self.size_free.0 + self.size.1, 0);
@@ -96,6 +114,7 @@ impl NN {
     }
 // #########################################################################################################################################
     
+    /// Cleans up network by merging doubled connections.
     pub fn post_process(&mut self) {
         self.connections.retain(|_, c| c.active && c.weight.abs() > 0.0001 ); // remove inactive 
         let keys: Vec<usize> = self.connections.keys().cloned().collect(); 
@@ -116,6 +135,11 @@ impl NN {
         // TODO removing dead-ends
     }
 
+    /// Compares self with other network, higher return means other is more different.
+    /// - c1 - excess genes weight,
+    /// - c2 - disjoint genes weight,
+    /// - c3 - weight difference between similar genes weight,
+    /// - c4 - different activation functions in similar nodes weight,
     pub fn compare(&self, nn: &NN, c1: f32, c2: f32, c3: f32, c4: f32) -> f32 {
         let mut g_e = 0;    // excess
         let mut g_d = 0;    // disjoint 
@@ -154,6 +178,7 @@ impl NN {
 
     // fitness average / species size 
     // fitness adjusted / global fitness adjusted * N
+    /// Clones network with higher fitness and averages similar genes.
     pub fn crossover(&self, nn: &NN) -> NN {
         let mut child = match self.fitness > nn.fitness {
             true => self.clone(),
@@ -177,6 +202,7 @@ impl NN {
 
 // #########################################################################################################################################
     
+    /// Calculates every node output according to layer ordering.
     pub fn process_network(&mut self, inputs: &[f32]) -> &Vec<f32> {
         let mut key = NodeKey::new(0, 0);
         self.nodes.get_mut(&key).unwrap().value = 1.;
@@ -205,6 +231,7 @@ impl NN {
         &self.outputs
     }
     
+    /// Calculate single node's output, along with gating value.
     pub fn process_node(&mut self, node_key: &NodeKey) {
         let mut sum = 0.0;
 
@@ -232,9 +259,10 @@ impl NN {
     }
 
 
-    // Returns option1 if made a new connection (from node, to node)
-    // Returns option2 if made a new node (innovation number of splited connection)
-    // handler needs to assign innov_id's after analyzing whole generation
+    /// Mutates network according to chances (pruning is disabled).
+    /// Returns option1 if made a new connection (from node, to node).
+    /// Returns option2 if made a new node (innovation number of split connection).
+    /// NEAT handler needs to assign innov_id's after analyzing whole generation.
     pub fn mutate(&mut self) -> (Option<Connection>, Option<( Connection, Connection )>) {
         self.generation += 1; // increment generation
 
@@ -267,9 +295,7 @@ impl NN {
         (n_conn, n_node)
     }
 
-    // TODO: nodes without input connections AND/OR output connections
-
-    // list of nodes, that have only one input, and another list only one output 
+    /// Deletes nodes and connections
     fn prune(&mut self, p: f64) -> Option<Connection>  {
         let mut rng = rand::rng();
         let mut out: Option<Connection> = None;
@@ -347,7 +373,7 @@ impl NN {
     }
 
 // #########################################################################################################################################
-    // returns splitted connection innovation number, if Some() global is incremented by 2 
+    /// Returns splitted connection innovation number, if Some() global is incremented by 2 .
     fn m_node_add(&mut self) -> Option<( Connection, Connection )> {
         // inserting nodes into recurrent connections, 
         // at the moment both are recurrent
@@ -385,7 +411,7 @@ impl NN {
         Some(( self.connections.get(&usize::MAX).unwrap().clone(), self.connections.get(&(usize::MAX-1)).unwrap().clone() ))
     }
 
-    // returns from and to node's innovation id's
+    /// Returns from and to node's innovation id's.
     fn m_connection_add(&mut self) -> Option<Connection> {
         let mut rng = rand::rng();
         // randomly select node index, that have free paths and isn't output, if none return (full)
@@ -419,7 +445,7 @@ impl NN {
         }
     }
 
-    // assings innovation numbers bc of above 2 funcs
+    /// Assings missing innovation numbers.
     pub fn correct_keys(&mut self, innov_id_1: usize, innov_id_2: usize) -> usize {
         let mut counter = 0; // tracks innovation incrementation
         if let Some(c) = self.connections.remove(&usize::MAX) {
@@ -436,6 +462,7 @@ impl NN {
     } 
 
 // #########################################################################################################################################
+
     fn m_connection_weight(&mut self){
         let mut rng = rand::rng();
         // small chance for new value, otherwise slight change from normal distribution
@@ -501,6 +528,8 @@ impl NN {
 
 // #########################################################################################################################################
 
+    /// For each node calculates two vectors of node key's 
+    /// that can be connected through feedforward and recurrent connections.
     pub fn free_nodes_calc(&mut self) {
         // List of outgoing connections from each node  
         let mut outgoing: HashMap<NodeKey, HashSet<NodeKey>> = HashMap::new();
@@ -560,11 +589,11 @@ impl NN {
         }
     }
 
-    // Layer order:
-    //  - based on a shortest non recurrent path to input
-    //  - loops aren't a big deal in a continuous environment so they are ignored
-    //  - only recurrent nodes order are based on layer of closest node in layer order 
-    // The feedforward approach should promote more stability, while recurrent approach even if arbitrary, should guarantee visual pretteness ;)
+    /// Layer order:
+    ///  - based on a shortest non-recurrent path to input
+    ///  - loops aren't a big deal in a continuous environment so they are ignored
+    ///  - only recurrent nodes order are based on layer of closest node in layer order 
+    /// The feedforward approach should promote more stability, while recurrent approach even if arbitrary, should guarantee visual pretteness ;)
     pub fn sort_layers(&mut self) {
         self.layer_order.clear();
         let layer_0: HashSet<NodeKey> = self.nodes.iter().filter(|(_,n)| n.genre == Genre::Input ).map(|(k,_)|k.clone()).collect();
@@ -678,22 +707,18 @@ impl NN {
         }
     }
 
-    // save nn to file
+    /// Save nn to file.
     pub fn save(&self, path: &str) {        
-        // convert simplified nn to Vec<u8>
         let toml: String = toml::to_string(
             &self
         ).unwrap();
     
-        // open file and write whole Vec<u8>
         let mut file = File::create(path).unwrap();
         file.write(toml.as_bytes()).unwrap();
     }
 
-    // load nn from file
+    /// Load nn from file.
     pub fn load(&mut self, path: &str) {
-
-        // convert readed Vec<u8> to plain nn
         let mut toml = String::new();
         let mut file = File::open(path).unwrap();
 
@@ -703,7 +728,6 @@ impl NN {
         *self = decoded;
     }
 }
-
 
 
 impl fmt::Debug for NN {

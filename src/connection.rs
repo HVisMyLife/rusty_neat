@@ -3,14 +3,19 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use crate::NodeKey;
 
-
+/// Struct representing network's gene, eg. connection between two nodes.
+/// It can be recurrent and/or have gating node.
 #[derive(PartialEq, PartialOrd, Clone, Serialize, Deserialize)]
 pub struct Connection {
-    pub from: NodeKey, // key of start node
-    pub to: NodeKey, // key of end node
+    /// Key of source node
+    pub from: NodeKey, 
+    /// Key of destination node
+    pub to: NodeKey,
     pub weight: f32,
-    pub active: bool, // connections can be deactivated through mutations
-    pub recurrent: bool, // aren't included in layer sort
+    pub active: bool,
+    /// Uses node's old value as input
+    pub recurrent: bool,
+    /// Connection is attenuated according to chosen node value
     pub gater: Option<NodeKey>
 }
 

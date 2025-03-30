@@ -2,6 +2,7 @@ use serde::{Serialize, Deserialize};
 use std::{collections::HashSet, fmt};
 use rand::seq::IndexedRandom;
 
+/// Activation function used after collecting node's inputs.
 #[derive(Eq, PartialOrd, Ord, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ActFunc {
     Sigmoid,
@@ -36,7 +37,7 @@ impl ActFunc {
             Self::Softsign => x / (1.0 + x.abs()),
             Self::GaussianBump => (-x * x / 2.0).exp(),
             Self::Sinusoid => x.sin(),
-            Self::ReLU => x.max(0.0),                  // Rectified Linear Unit
+            Self::ReLU => x.max(0.0),
             Self::LeakyReLU => {
                 const ALPHA: f32 = 0.01;
                 if x > 0.0 {x} 
@@ -52,7 +53,7 @@ impl ActFunc {
             Self::BentIdentity => if x > 0.0 { x } else { x / 5.0 },
             Self::Inverse => -x,
             Self::BinaryStep => if x < 0.0 { 0.0 } else { 1.0 },
-            Self::Bipolar => if x < 0.0 { -1.0 } else { 1.0 }, // Sign function
+            Self::Bipolar => if x < 0.0 { -1.0 } else { 1.0 },
             Self::None => value + x, // for inputs
         }
     }
@@ -82,7 +83,7 @@ impl fmt::Debug for ActFunc {
     }
 }
 
-
+// Node's genre
 #[derive(Eq, PartialOrd, Ord, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Genre {
     Hidden,
@@ -90,6 +91,8 @@ pub enum Genre {
     Output,
 }
 
+/// Node's key, first field is derived from splitted connection innovation number.
+/// Second field is there in case connection was splitted more than one time.
 #[derive(PartialOrd, Ord, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct NodeKey {
     pub sconn: usize,
@@ -111,19 +114,24 @@ impl NodeKey {
     }
 }
 
-
+/// Struct representing network's node.
 #[derive(PartialEq, Clone, Serialize, Deserialize)]
 pub struct Node {
+    /// Node's output
     pub value: f32,
+    /// Output used for gating, it's sharp sigmoid (low computation cost)
     pub value_gate: f32,
+    /// Value used for recurrent connections
     pub value_old: f32,
-    pub genre: Genre, // 0 - hidden, 1 - input, 2 - output
+    /// 0 - hidden, 1 - input, 2 - output
+    pub genre: Genre, 
     pub act_func: ActFunc,
-    pub free_nodes_f: HashSet<NodeKey>, // vec containing nodes, to which there is free path
-    pub free_nodes_r: HashSet<NodeKey>, // vec containing nodes, to which there is free path
+    /// To which nodes there is free feedforward path
+    pub free_nodes_f: HashSet<NodeKey>, 
+    /// To which nodes there is free recurrent path
+    pub free_nodes_r: HashSet<NodeKey>, 
 }
 impl Node {
-    // initializing to random values 
     pub fn new(genre: Genre, af: &ActFunc) -> Self { 
         // input nodes don't have activation functions
         let af_c = if genre == Genre::Input {ActFunc::None}

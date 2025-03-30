@@ -8,7 +8,8 @@ Innovation numers aren't generation-specific, I'm using a global look-up hashmap
 Crates lib will be updated when I finish bugfixing etc, so somewhere between few days and several years.
 
 ## NN visual representation 
-Network can be saved as .svg: blue connections are recurrent, thickness represents weight, and node 0 is a bias. Gating visualisation is something that I want to add, but I'm open to suggestions how to display it.
+Image generation is behind "visu" feature, type is derived from path (svg, png, jpg).
+Blue connections are recurrent, thickness represents weight, and node 0 is a bias. Gating visualisation is something that I want to add, but I'm open to suggestions how to display it.
 ![example](https://github.com/HVisMyLife/rusty_neat/blob/master/data/nn.png)
 
 ## What it does?
@@ -16,21 +17,19 @@ In short, you start by creating input and output nodes, without any connections,
 Then, through randomly evolving, there are added intermediate nodes and connections, which characteristics are randomly changed.
 
 ## Features
-### Evolution based on speciation and crossovers. 
-### Each connection has an optional gating node. 
-### Two handlers, one for generation-based enviroments, and second for more continous work, eg networks generate offspring on-the-run.
-### Pruning (swichable): each mutation instead of expanding network, removes either node or connection (ratio is settable) in a non-destructive manner.
-### Expandable I/O topology. It allows to train network on simplest possible set of inputs, and then gradually expand it's abilities.
-### Network is divided in layers based on feedforward connections, which allows for quicker stabilisation time than in original neat. Solely recurrent nodes are placed in the same layer as closest "normal" node. It is kinda arbitrary, but due to chaotic neat nature (there is no cycle-prevention) it's impossible to work-out perfect calculation order.
-### Network post-processing, used on evolved network to simplify it (in-progress)
+- Evolution based on speciation and crossovers. 
+- Each connection has an optional gating node. 
+- Two handlers, one for generation-based enviroments, and second for more continous work, eg networks generate offspring on-the-run.
+- Pruning (swichable): each mutation instead of expanding network, removes either node or connection (ratio is settable) in a non-destructive manner.
+- Expandable I/O topology. It allows to train network on simplest possible set of inputs, and then gradually expand it's abilities.
+- Network is divided in layers based on feedforward connections, which allows for quicker stabilisation time than in original neat. Solely recurrent nodes are placed in the same layer as closest "normal" node. It is kinda arbitrary, but due to chaotic neat nature (there is no cycle-prevention) it's impossible to work-out perfect calculation order.
+- Network post-processing, used on evolved network to simplify it (in-progress)
 
 ## How to use it?
 Create large amount of agents, each with each own neural networks. Let simulation run ( or whatever you are using it for ) and after set amount of time choose best of them to be parents of next generation (intermittent mode).
 Alternatively, you can make agents spawn children after, for example, surviving and getting set amount of points, which nature depends on use case (continous mode).
 
 Next generation should be created by crossing two parents, depending on the mode it looks slightly different, but at least one parent is choosed based on fitness probabillity distribution inside of species.
-
-Image generation is behind "visu" feature, type is derived from path (svg, png, jpg).
 
 Inserting saved network into ongoing neat is something that I'm working on. At the moment it isn't possible due to different innovation numbers.
 
@@ -39,7 +38,7 @@ Full wiki is a work in progress, in the meantime feel free to reach out directly
 ## Infinite length evolution 
 By gradually including harder to utilise inputs networks can learn complex enviroments with relatively small agents amount. One possible downside to that approach is long training time, which could result in excessive network size. However thanks to pruning ability, size can be kept at minimum at all times, no matter training length.
 
-Here you have example project that uses it to train "cars" ride along random track: https://github.com/HVisMyLife/neat_race
+Here you have example project that uses it to train "cars" ride along random track: <https://github.com/HVisMyLife/neat_race>
 
 ## Exaple usage:
 
