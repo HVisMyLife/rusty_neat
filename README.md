@@ -30,6 +30,10 @@ Alternatively, you can make agents spawn children after, for example, surviving 
 
 Next generation should be created by crossing two parents, depending on the mode it looks slightly different, but at least one parent is choosed based on fitness probabillity distribution inside of species.
 
+Image generation is behind "image" feature, type is derived from path (svg, png, jpg).
+
+Inserting saved network into ongoing neat is something that I'm working on. At the moment it isn't possible due to different innovation numbers.
+
 Full wiki is a work in progress, in the meantime feel free to reach out directly to me.
 
 ## Infinite length evolution 
@@ -40,52 +44,60 @@ Here you have example project that uses it to train "cars" ride along random tra
 ## Exaple usage:
 
 ```rust
+    use std::fs::File;
+    use std::io::Write;
+    
     use rusty_neat::{NN, ActFunc, svg_nn};
     use rusty_neat::NeatIntermittent;
-
+    
     fn main() {
         let gens = 100;
         let size = 10;
-        let mut nn = NN::new(2, 2, Some((1,1)), true, ActFunc::HyperbolicTangent, // reserving additional space for 1 input, and 1 output
+        let mut nn = NN::new(2, 2, Some((1,1)), true, 0.75, ActFunc::HyperbolicTangent, 
             &[ActFunc::HyperbolicTangent, ActFunc::SELU, ActFunc::Sigmoid] );
         nn.set_chances(&[0, 20, 5, 10, 3, 0, 0, 0]);
-        let mut handler = NeatIntermittent::new(&nn, size);
-
+        let mut handler = NeatIntermittent::new(&nn, size, 5);
+    
         handler.species_amount = 2;
+    
         handler.agents.iter_mut().enumerate().for_each(|(_,a)| a.fitness = 100. );
         handler.forward(&vec![vec![1.;2]; size]);
         handler.add_input();
-        handler.add_output();
-
-        for _ in 0..gens {
+        handler.add_output(&ActFunc::HyperbolicTangent);
+    
+        for i in 0..gens {
             handler.speciate();
             handler.next_gen();
             handler.mutate(None);
             handler.forward(&vec![vec![1.;3]; handler.agents.len()]);
+            println!("g:{}", i)
         }
         handler.agents.iter().enumerate().for_each(|(i, a)| {
-            svg_nn(a, true, i);
+            svg_nn(a, Some(&format!("{}.svg", i)));
+            a.save(&format!("{}.toml", i));
             let mut file = File::create(
                 &("nn".to_string() + &i.to_string() + ".toml")).unwrap();
             file.write_all(format!("{:?}", a).as_bytes()).unwrap();
         } );
-
-        handler.set_pruning(true, 0.33); // 33% on deleting node (if possible)
+    
+        handler.set_pruning(true, 0.33);
+        println!("M");
         for i in 0..gens {
             handler.speciate();
             handler.mutate(None);
             handler.forward(&vec![vec![1.;8]; handler.agents.len()]);
-            println!("{}", i)
+            println!("r:{}", i)
         }
-
+    
         handler.agents.iter().enumerate().for_each(|(i, a)| {
-            svg_nn(a, true, i+100);
+            svg_nn(a, Some(&format!("{}.svg", i)));
+            svg_nn(a, Some(&format!("{}.png", i)));
             let mut file = File::create(
                 &("nn".to_string() + &i.to_string() + "_pruned.toml")).unwrap();
             file.write_all(format!("{:?}", a).as_bytes()).unwrap();
         } );
-        //println!("{:?}", handler);
     }
+
 ```
 
 Possible mutations it's order, and default chances:

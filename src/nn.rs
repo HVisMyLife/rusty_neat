@@ -2,15 +2,18 @@ use itertools::Itertools;
 use rand::{seq::IteratorRandom, Rng};
 use rand_distr::{weighted::WeightedIndex, Distribution, Normal};
 use serde::{Serialize, Deserialize};
+use serde_with::serde_as;
 use core::f32;
 use std::{collections::{HashMap, HashSet}, fmt, fs::File, io::{Read, Write}};
 
 use crate::{connection::Connection, node::{ActFunc, Genre, Node, NodeKey}};
 
-
+#[serde_as]
 #[derive(Clone, Serialize, Deserialize)]
-pub struct NN {    
+pub struct NN {
+    #[serde_as(as = "Vec<(_, _)>")]
     pub nodes: HashMap<NodeKey, Node>, // key is a splited connection key + doubles protection
+    #[serde_as(as = "Vec<(_, _)>")]
     pub connections: HashMap<usize, Connection>, // key is an innovation number
     pub layer_order: Vec<HashSet<NodeKey>>, // layers for calculating values
     pub idle: HashSet<NodeKey>, // nodes without input connections 
@@ -549,6 +552,7 @@ impl NN {
     }
 
     // make sure that all nodes are in order
+    #[allow(dead_code)]
     fn get_node_layer(&self, key: &NodeKey) -> usize {
         match self.layer_order.iter().position(|layer| layer.contains(key)) {
             Some(t) => t,

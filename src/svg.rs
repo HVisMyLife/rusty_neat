@@ -1,7 +1,10 @@
 use crate::{Genre, NodeKey, NN};
 use itertools::Itertools;
-use simplesvg as svg;
 use std::{collections::HashMap, fs};
+
+use simplesvg as svg;
+use usvg::{self, TreeParsing, TreeTextToPath, TreeWriting};
+
 
 pub fn svg_nn(nn: &NN, save_path: Option<&str>) -> String {
     let mut objs: Vec<svg::Fig> = vec![];
@@ -64,9 +67,30 @@ pub fn svg_nn(nn: &NN, save_path: Option<&str>) -> String {
     bg = bg.styled(att);
     objs.insert(0, bg);
 
-    let out = svg::Svg{0: objs, 1: size.0 as u32, 2: size.1 as u32}.to_string();
+    let svg = svg::Svg{0: objs, 1: size.0 as u32, 2: size.1 as u32}.to_string();
+
+    let mut database = usvg::fontdb::Database::default();
+    database.load_system_fonts();
+    let mut options = usvg::Options::default();
+    options.font_family = "FiraCode Nerd Font Mono".to_string();
+    let xml_options = usvg::XmlOptions::default();
+
+    let mut tree = usvg::Tree::from_str(&svg, &options).unwrap();
+    tree.convert_text(&database);
+    let out = tree.to_string(&xml_options);
+
     if let Some(path) = save_path {
-        fs::write(&path, out.clone()).unwrap();
+        if path.contains(".svg") {
+            fs::write(&path, out.clone()).unwrap();
+        } else if path.contains(".png") || path.contains(".jpg") {
+            let svg2 = nsvg::parse_str(&out, nsvg::Units::Pixel, 96.).unwrap();
+            let image = svg2.rasterize_to_raw_rgba(1.).unwrap();
+            nsvg::image::save_buffer(
+                path, image.2.as_slice(), 
+                image.0, image.1, nsvg::image::ColorType::RGBA(8)).unwrap();
+        } else {
+            panic!("Wrong extension")
+        }
     }
     out
 }

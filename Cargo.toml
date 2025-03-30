@@ -7,21 +7,24 @@ readme = "README.md"
 license-file = "LICENSE.md"
 homepage = "https://github.com/HVisMyLife/rusty_neat"
 repository = "https://github.com/HVisMyLife/rusty_neat"
-keywords = ["neat", "neural_network", "ai", "gates", "recurrency"]
+keywords = ["neat", "neural_network", "neuroevolution", "ai", "gates", "recurrency"]
 categories = ["mathematics"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "^1.0.125", features = ["derive"] }
-toml = "^0.8"
+rayon = "^1.10"
+itertools = "^0.14"
 
 rand = "^0.9"
 rand_distr = "^0.5"
 
-simplesvg = "^0.4"
+serde_with = "^3.12"
+serde = { version = "^1.0.125", features = ["derive"] }
+toml = "^0.8"
 
-rayon = "^1.10"
-itertools = "^0.14"
+simplesvg = { version = "^0.4", optional = true }
+usvg = { version = "^0.37", optional = true }
+nsvg = { version = "^0.5", optional = true }
 
-# ndarray = { version = "^0.16", features = ["rayon", "serde"]}
-#ndarray-rand = "^0.14.0"
+[features]
+image = ["dep:simplesvg", "dep:usvg", "dep:nsvg"]
