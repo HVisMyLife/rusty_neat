@@ -1,6 +1,6 @@
 [package]
 name = "rusty_neat"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 description = "Pretty good NEAT implementation"
 readme = "README.md"
@@ -19,7 +19,7 @@ rand = "^0.9"
 rand_distr = "^0.5"
 
 serde_with = "^3.12"
-serde = { version = "^1.0.125", features = ["derive"] }
+serde = { version = "^1.0", features = ["derive"] }
 toml = "^0.8"
 
 simplesvg = { version = "^0.4", optional = true }
@@ -30,6 +30,4 @@ nsvg = { version = "^0.5", optional = true }
 visu = ["dep:simplesvg", "dep:usvg", "dep:nsvg"]
 
 [package.metadata.docs.rs]
-features = ["visu", "dep:simplesvg", "dep:usvg", "dep:nsvg"]
-# [package.metadata.crates.io]
-# features = ["visu", "simplesvg", "usvg", "nsvg"]
+all-features = true
