@@ -1,7 +1,7 @@
 # rusty_neat
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue)](https://github.com/HVisMyLife/rusty_neat/blob/master/LICENSE.md)
-[![crates.io](https://img.shields.io/crates/v/rusty_neat.svg)](https://docs.rs/rusty_neat/0.2.1/rusty_neat/)
+[![crates.io](https://img.shields.io/crates/v/rusty_neat.svg)](https://docs.rs/crate/rusty_neat/latest)
 
 Library for handling Neuroevolution of augmenting topologies.
 
