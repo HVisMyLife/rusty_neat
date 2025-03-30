@@ -1,6 +1,6 @@
 [package]
 name = "rusty_neat"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Pretty good NEAT implementation"
 readme = "README.md"
