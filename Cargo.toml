@@ -2,7 +2,7 @@
 name = "rusty_neat"
 version = "0.2.0"
 edition = "2024"
-description = "Simple NEAT lib"
+description = "Pretty good NEAT implementation"
 readme = "README.md"
 license-file = "LICENSE.md"
 homepage = "https://github.com/HVisMyLife/rusty_neat"
