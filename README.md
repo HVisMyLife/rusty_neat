@@ -1,13 +1,16 @@
 # rusty_neat
-Simple lib for handling Neuroevolution of augmenting topologies.
+
+[![GitHub tag](https://img.shields.io/github/tag/HVisMyLife/rusty_neat?include_prereleases=&sort=semver&color=blue)](https://github.com/HVisMyLife/rusty_neat/releases/)
+[![License](https://img.shields.io/badge/License-GPL--3.0-blue)](#license)
+[![view - Docs](https://img.shields.io/badge/view-Documentation-blue?style=for-the-badge)](https://docs.rs/rusty_neat/0.2.0/rusty_neat/)
+
+Library for handling Neuroevolution of augmenting topologies.
 
 It may not be exact implementation of that alghoritm, but it's simple, fast, and easy to use.
 
 Innovation numers aren't generation-specific, I'm using a global look-up hashmap, so if two connections "look" the same, they have also the same number. I'm not a big fan of approach from original paper, because in my test cases innovations were exploding. Moreover, continous variant is borderline impossible to achieve without at least some modifications.
 
-Crates lib will be updated when I finish bugfixing etc, so somewhere between few days and several years.
-
-## NN visual representation 
+## Network visual representation 
 Image generation is behind "visu" feature, type is derived from path (svg, png, jpg).
 Blue connections are recurrent, thickness represents weight, and node 0 is a bias. Gating visualisation is something that I want to add, but I'm open to suggestions how to display it.
 ![.](https://github.com/HVisMyLife/rusty_neat/blob/master/data/nn.png)
@@ -33,12 +36,14 @@ Next generation should be created by crossing two parents, depending on the mode
 
 Inserting saved network into ongoing neat is something that I'm working on. At the moment it isn't possible due to different innovation numbers.
 
-Full wiki is a work in progress, in the meantime feel free to reach out directly to me.
+If docs aren't enough, or you have any feature request, feel free to reach out directly to me.
 
 ## Infinite length evolution 
 By gradually including harder to utilise inputs networks can learn complex enviroments with relatively small agents amount. One possible downside to that approach is long training time, which could result in excessive network size. However thanks to pruning ability, size can be kept at minimum at all times, no matter training length.
 
-Here you have example project that uses it to train "cars" ride along random track: <https://github.com/HVisMyLife/neat_race>
+Here you have example project that uses it to train "cars" ride along random track: <https://github.com/HVisMyLife/neat_race>.
+
+There is also ecosystem simulation that uses continous variant, but it's currently resting in development hell: <https://github.com/HVisMyLife/sectarii>
 
 ## Exaple usage:
 
