@@ -30,7 +30,7 @@ Alternatively, you can make agents spawn children after, for example, surviving 
 
 Next generation should be created by crossing two parents, depending on the mode it looks slightly different, but at least one parent is choosed based on fitness probabillity distribution inside of species.
 
-Image generation is behind "image" feature, type is derived from path (svg, png, jpg).
+Image generation is behind "visu" feature, type is derived from path (svg, png, jpg).
 
 Inserting saved network into ongoing neat is something that I'm working on. At the moment it isn't possible due to different innovation numbers.
 
@@ -47,7 +47,7 @@ Here you have example project that uses it to train "cars" ride along random tra
     use std::fs::File;
     use std::io::Write;
     
-    use rusty_neat::{NN, ActFunc, svg_nn};
+    use rusty_neat::{NN, ActFunc, visu};
     use rusty_neat::NeatIntermittent;
     
     fn main() {
@@ -73,7 +73,7 @@ Here you have example project that uses it to train "cars" ride along random tra
             println!("g:{}", i)
         }
         handler.agents.iter().enumerate().for_each(|(i, a)| {
-            svg_nn(a, Some(&format!("{}.svg", i)));
+            visu(a, Some(&format!("{}.svg", i)));
             a.save(&format!("{}.toml", i));
             let mut file = File::create(
                 &("nn".to_string() + &i.to_string() + ".toml")).unwrap();
@@ -90,8 +90,8 @@ Here you have example project that uses it to train "cars" ride along random tra
         }
     
         handler.agents.iter().enumerate().for_each(|(i, a)| {
-            svg_nn(a, Some(&format!("{}.svg", i)));
-            svg_nn(a, Some(&format!("{}.png", i)));
+            visu(a, Some(&format!("{}.svg", i)));
+            visu(a, Some(&format!("{}.png", i)));
             let mut file = File::create(
                 &("nn".to_string() + &i.to_string() + "_pruned.toml")).unwrap();
             file.write_all(format!("{:?}", a).as_bytes()).unwrap();

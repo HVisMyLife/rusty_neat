@@ -6,7 +6,7 @@ use simplesvg as svg;
 use usvg::{self, TreeParsing, TreeTextToPath, TreeWriting};
 
 
-pub fn svg_nn(nn: &NN, save_path: Option<&str>) -> String {
+pub fn visu(nn: &NN, save_path: Option<&str>) -> String {
     let mut objs: Vec<svg::Fig> = vec![];
     let mut positions: HashMap<NodeKey, (f32, f32)> = HashMap::new();
     nn.nodes.iter().for_each(|(key, _)|{ positions.insert(key.clone(), (0.,0.)); });

@@ -27,4 +27,4 @@ usvg = { version = "^0.37", optional = true }
 nsvg = { version = "^0.5", optional = true }
 
 [features]
-image = ["dep:simplesvg", "dep:usvg", "dep:nsvg"]
+visu = ["dep:simplesvg", "dep:usvg", "dep:nsvg"]
