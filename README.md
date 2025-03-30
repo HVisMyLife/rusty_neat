@@ -10,7 +10,7 @@ Crates lib will be updated when I finish bugfixing etc, so somewhere between few
 ## NN visual representation 
 Image generation is behind "visu" feature, type is derived from path (svg, png, jpg).
 Blue connections are recurrent, thickness represents weight, and node 0 is a bias. Gating visualisation is something that I want to add, but I'm open to suggestions how to display it.
-![example](https://github.com/HVisMyLife/rusty_neat/blob/master/data/nn.png)
+![.](https://github.com/HVisMyLife/rusty_neat/blob/master/data/nn.png)
 
 ## What it does?
 In short, you start by creating input and output nodes, without any connections, etc. 
